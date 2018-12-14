@@ -234,7 +234,7 @@ class ModelTrainer(object):
         return model_id
 
     def _train_and_store_model(
-        self, matrix_store, class_path, parameters, model_hash, misc_db_parameters
+        self, matrix_store, class_path, parameters, model_hash, misc_db_parameters, model_group_id
     ):
         """Train a model, cache it, and write metadata to a database
 
@@ -253,9 +253,6 @@ class ModelTrainer(object):
 
         unique_parameters = self.unique_parameters(parameters)
 
-        model_group_id = self.model_grouper.get_model_group_id(
-            class_path, unique_parameters, matrix_store.metadata, self.db_engine
-        )
         logging.info(
             "Trained model: hash %s, model group id %s ", model_hash, model_group_id
         )
@@ -323,7 +320,7 @@ class ModelTrainer(object):
         ]
 
     def process_train_task(
-        self, matrix_store, class_path, parameters, model_hash, misc_db_parameters
+        self, matrix_store, class_path, parameters, model_hash, misc_db_parameters, model_group_id
     ):
         """Trains and stores a model, or skips it and returns the existing id
 
@@ -357,7 +354,7 @@ class ModelTrainer(object):
         )
         try:
             model_id = self._train_and_store_model(
-                matrix_store, class_path, parameters, model_hash, misc_db_parameters
+                matrix_store, class_path, parameters, model_hash, misc_db_parameters, model_group_id
             )
         except BaselineFeatureNotInMatrix:
             logging.warning(
@@ -366,7 +363,7 @@ class ModelTrainer(object):
             model_id = None
         return model_id
 
-    def generate_train_tasks(self, grid_config, misc_db_parameters, matrix_store=None):
+    def generate_train_tasks(self, grid_config, misc_db_parameters, matrix_store=None, model_group_lookup=None):
         """Train and store configured models, yielding the ids one by one
 
         Args:
@@ -409,14 +406,14 @@ class ModelTrainer(object):
                     parameters,
                 )
                 continue
-            tasks.append(
-                {
-                    "matrix_store": matrix_store,
-                    "class_path": class_path,
-                    "parameters": parameters,
-                    "model_hash": model_hash,
-                    "misc_db_parameters": misc_db_parameters,
-                }
-            )
+            task = {
+                "matrix_store": matrix_store,
+                "class_path": class_path,
+                "parameters": parameters,
+                "model_hash": model_hash,
+                "misc_db_parameters": misc_db_parameters,
+            }
+            task['model_group_id'] = model_group_lookup[task]
+            tasks.append(task)
         logging.info("Found %s unique model training tasks", len(tasks))
         return tasks

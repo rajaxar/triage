@@ -525,13 +525,35 @@ class ExperimentBase(ABC):
         logging.info("Building all matrices")
         self.build_matrices()
 
+    def generate_model_groups(self):
+        model_group_ids = {}
+        grouper = ModelGrouper(self.config.get("model_group_keys", []))
+        for split_num, split in enumerate(self.full_matrix_definitions):
+            self.log_split(split_num, split)
+            train_store = self.matrix_storage_engine.get_store(split["train_uuid"])
+            train_tasks = self.trainer.generate_train_tasks(
+                grid_config=self.config["grid_config"],
+                misc_db_parameters=dict(
+                    test=False, model_comment=self.config.get("model_comment", None)
+                ),
+                matrix_store=train_store,
+            )
+            for train_task in train_tasks:
+                model_group_ids[train_task] = grouper.get_model_group_id(
+                    class_path=train_task['class_path'],
+                    parameters=train_task['parameters'], 
+                    matrix_metadata=train_store.metadata,
+                )
+        return model_group_ids
+
+
     def train_and_test_models(self):
         if "grid_config" not in self.config:
             logging.warning(
                 "No grid_config was passed in the experiment config. No models will be trained"
             )
             return
-
+        model_groups = self.generate_model_groups()
         for split_num, split in enumerate(self.full_matrix_definitions):
             self.log_split(split_num, split)
             train_store = self.matrix_storage_engine.get_store(split["train_uuid"])
@@ -560,6 +582,7 @@ class ExperimentBase(ABC):
                     test=False, model_comment=self.config.get("model_comment", None)
                 ),
                 matrix_store=train_store,
+                model_group_lookup=model_groups,
             )
 
             associate_models_with_experiment(
