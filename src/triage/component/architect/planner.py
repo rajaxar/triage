@@ -117,8 +117,8 @@ class Planner(object):
         updated_definitions = []
         build_tasks = dict()
         for matrix_set in matrix_set_definitions:
-            logging.info("Making plans for matrix set %s", matrix_set)
-            logging.info(
+            logging.debug("Making plans for matrix set %s", matrix_set)
+            logging.debug(
                 "Iterating over %s label names, %s label_types, %s cohort_names, "
                 "%s feature dictionaries",
                 len(self.label_names),
@@ -146,7 +146,7 @@ class Planner(object):
                     "train",
                 )
                 train_uuid = metta.generate_uuid(train_metadata)
-                logging.info(
+                logging.debug(
                     "Matrix UUID %s found for train metadata %s",
                     train_uuid,
                     train_metadata,
@@ -155,12 +155,12 @@ class Planner(object):
                     build_tasks[train_uuid] = self._generate_build_task(
                         train_metadata, train_uuid, train_matrix, feature_dictionary
                     )
-                    logging.info(
+                    logging.debug(
                         "Train uuid %s not found in build tasks yet, " "so added",
                         train_uuid,
                     )
                 else:
-                    logging.info(
+                    logging.debug(
                         "Train uuid %s already found in build tasks", train_uuid
                     )
                 matrix_set_clone["train_uuid"] = train_uuid
@@ -176,7 +176,7 @@ class Planner(object):
                         "test",
                     )
                     test_uuid = metta.generate_uuid(test_metadata)
-                    logging.info(
+                    logging.debug(
                         "Matrix UUID %s found for test metadata %s",
                         test_uuid,
                         test_metadata,
@@ -185,12 +185,12 @@ class Planner(object):
                         build_tasks[test_uuid] = self._generate_build_task(
                             test_metadata, test_uuid, test_matrix, feature_dictionary
                         )
-                        logging.info(
+                        logging.debug(
                             "Test uuid %s not found in build tasks " "yet, so added",
                             test_uuid,
                         )
                     else:
-                        logging.info(
+                        logging.debug(
                             "Test uuid %s already found in build tasks", test_uuid
                         )
 

@@ -24,7 +24,7 @@ class ModelTrainTester(object):
         self.predictor = predictor
 
     def generate_tasks(self, split, grid_config, model_comment=None):
-        logging.info("Generating train/test tasks for split %s", split["train_uuid"])
+        logging.debug("Generating train/test tasks for split %s", split["train_uuid"])
         train_store = self.matrix_storage_engine.get_store(split["train_uuid"])
         if train_store.empty:
             logging.warning(
@@ -73,11 +73,13 @@ class ModelTrainTester(object):
         return train_test_tasks
 
     def process_all_tasks(self, tasks):
-        for task in tasks:
+        for task_num, task in enumerate(tasks, 1):
             self.process_task(**task)
+            if task_num % 10 == 1:
+                logging.info("Processed train/test task %s of %s", task_num, len(tasks))
 
     def process_task(self, test_store, train_store, train_kwargs):
-        logging.info("Beginning train task %s", train_kwargs)
+        logging.debug("Beginning train task %s", train_kwargs)
         with self.model_trainer.cache_models(), test_store.cache(), train_store.cache():
             # will cache any trained models until it goes out of scope (at the end of the task)
             # this way we avoid loading the model pickle again for predictions
@@ -86,9 +88,9 @@ class ModelTrainTester(object):
                 logging.warning("No model id returned from ModelTrainer.process_train_task, "
                                 "training unsuccessful. Not attempting to test")
                 return
-            logging.info("Trained task %s and got model id %s", train_kwargs, model_id)
+            logging.debug("Trained task %s and got model id %s", train_kwargs, model_id)
             as_of_times = test_store.metadata["as_of_times"]
-            logging.info(
+            logging.debug(
                 "Testing and scoring model id %s with test matrix %s. "
                 "as_of_times min: %s max: %s num: %s",
                 model_id,
@@ -105,7 +107,7 @@ class ModelTrainTester(object):
             # Generate predictions for the testing data then training data
             for store in (test_store, train_store):
                 if self.predictor.replace or self.model_evaluator.needs_evaluations(store, model_id):
-                    logging.info(
+                    logging.debug(
                         "The evaluations needed for matrix %s-%s and model %s"
                         "are not all present in db, so predicting and evaluating",
                         store.uuid,
@@ -125,7 +127,7 @@ class ModelTrainTester(object):
                         model_id=model_id,
                     )
                 else:
-                    logging.info(
+                    logging.debug(
                         "The evaluations needed for matrix %s-%s and model %s are all present"
                         "in db from a previous run (or none needed at all), so skipping!",
                         store.uuid,

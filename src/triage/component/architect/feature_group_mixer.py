@@ -94,11 +94,11 @@ class FeatureGroupMixer(object):
         """
         final_results = []
         for strategy in self.strategies:
-            logging.info(
+            logging.debug(
                 "Mixing feature groups %s using strategy %s", feature_groups, strategy
             )
             results = self.strategy_lookup[strategy](feature_groups)
-            logging.info("Mixing found new feature groups %s", results)
+            logging.debug("Mixing found new feature groups %s", results)
             final_results += results
 
         return final_results

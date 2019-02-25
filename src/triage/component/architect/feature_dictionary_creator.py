@@ -35,7 +35,7 @@ class FeatureDictionaryCreator(object):
                 )
             ]
             feature_dictionary[feature_table_name] = FeatureNameList(feature_names)
-        logging.info("Feature dictionary built: %s", feature_dictionary)
+        logging.debug("Feature dictionary built: %s", feature_dictionary)
         return feature_dictionary
 
     def _build_feature_names_query(self, table_name, index_columns):
@@ -60,7 +60,7 @@ class FeatureDictionaryCreator(object):
             schema=self.features_schema_name,
             index_columns=str_in_sql(index_columns),
         )
-        logging.info(
+        logging.debug(
             "Extracting all possible feature names for table %s with query %s",
             table_name,
             feature_names_query,

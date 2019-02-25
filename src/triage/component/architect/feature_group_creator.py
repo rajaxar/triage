@@ -90,19 +90,19 @@ class FeatureGroupCreator(object):
         Returns: (list) subsets of the feature dictionary, in the same
             table-based structure
         """
-        logging.info(
+        logging.debug(
             "Creating feature groups. config: %s, Master feature dictionary: %s",
             self.definition,
             feature_dictionary,
         )
         subsets = []
         for name, config in sorted(self.definition.items()):
-            logging.info("Parsing config grouping method %s, items %s", name, config)
+            logging.debug("Parsing config grouping method %s, items %s", name, config)
             for config_item in config:
                 subset = FeatureGroup(name="{}: {}".format(name, config_item))
-                logging.info("Finding columns that might belong in %s", subset)
+                logging.debug("Finding columns that might belong in %s", subset)
                 for table, features in feature_dictionary.items():
-                    logging.info(
+                    logging.debug(
                         "Searching features in table %s that match group %s",
                         table,
                         subset
@@ -110,7 +110,7 @@ class FeatureGroupCreator(object):
                     matching_features = self.subsetters[name](
                         config_item, table, features
                     )
-                    logging.info(
+                    logging.debug(
                         "Found %s matching features in table %s that match group %s",
                         len(matching_features),
                         table,
@@ -125,5 +125,5 @@ class FeatureGroupCreator(object):
                 f"Problem! The feature group definition {self.definition} did not find any matches",
                 f"in feature dictionary {feature_dictionary}"
             )
-        logging.info("Found %s total feature subsets", len(subsets))
+        logging.debug("Found %s total feature subsets", len(subsets))
         return subsets

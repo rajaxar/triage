@@ -242,7 +242,7 @@ class MatrixBuilder(BuilderBase):
         :return: none
         :rtype: none
         """
-        logging.info("popped matrix %s build off the queue", matrix_uuid)
+        logging.debug("popped matrix %s build off the queue", matrix_uuid)
         if not table_has_data(
             self.db_config["cohort_table_name"], self.db_engine
         ):
@@ -260,16 +260,16 @@ class MatrixBuilder(BuilderBase):
 
         matrix_store = self.matrix_storage_engine.get_store(matrix_uuid)
         if not self.replace and matrix_store.exists:
-            logging.info("Skipping %s because matrix already exists", matrix_uuid)
+            logging.debug("Skipping %s because matrix already exists", matrix_uuid)
             return
 
-        logging.info(
+        logging.debug(
             "Creating matrix %s > %s",
             matrix_metadata["matrix_id"],
             matrix_store.matrix_base_store.path,
         )
         # make the entity time table and query the labels and features tables
-        logging.info("Making entity date table for matrix %s", matrix_uuid)
+        logging.debug("Making entity date table for matrix %s", matrix_uuid)
         try:
             entity_date_table_name = self.make_entity_date_table(
                 as_of_times,
@@ -286,15 +286,15 @@ class MatrixBuilder(BuilderBase):
                 exc_info=True,
             )
             return
-        logging.info(
+        logging.debug(
             "Extracting feature group data from database into file " "for matrix %s",
             matrix_uuid,
         )
         dataframes = self.load_features_data(
             as_of_times, feature_dictionary, entity_date_table_name, matrix_uuid
         )
-        logging.info(f"Feature data extracted for matrix {matrix_uuid}")
-        logging.info(
+        logging.debug(f"Feature data extracted for matrix {matrix_uuid}")
+        logging.debug(
             "Extracting label data from database into file for " "matrix %s",
             matrix_uuid,
         )
@@ -307,18 +307,18 @@ class MatrixBuilder(BuilderBase):
         )
         dataframes.insert(0, labels_df)
 
-        logging.info(f"Label data extracted for matrix {matrix_uuid}")
+        logging.debug(f"Label data extracted for matrix {matrix_uuid}")
         # stitch together the csvs
-        logging.info("Merging feature files for matrix %s", matrix_uuid)
+        logging.debug("Merging feature files for matrix %s", matrix_uuid)
         output = self.merge_feature_csvs(dataframes, matrix_uuid)
-        logging.info(f"Features data merged for matrix {matrix_uuid}")
+        logging.debug(f"Features data merged for matrix {matrix_uuid}")
 
         matrix_store.metadata = matrix_metadata
         # store the matrix
         labels = output.pop(matrix_store.label_column_name)
         matrix_store.matrix_label_tuple = output, labels
         matrix_store.save()
-        logging.info("Matrix {matrix_uuid} saved")
+        logging.debug("Matrix {matrix_uuid} saved")
         # If completely archived, save its information to matrices table
         # At this point, existence of matrix already tested, so no need to delete from db
         if matrix_type == "train":
@@ -425,7 +425,7 @@ class MatrixBuilder(BuilderBase):
         # iterate! for each table, make query, write csv, save feature & file names
         feature_dfs = []
         for feature_table_name, feature_names in feature_dictionary.items():
-            logging.info("Retrieving feature data from %s", feature_table_name)
+            logging.debug("Retrieving feature data from %s", feature_table_name)
             features_query = self._outer_join_query(
                 right_table_name="{schema}.{table}".format(
                     schema=self.db_config["features_schema_name"],

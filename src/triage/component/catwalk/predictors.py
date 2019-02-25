@@ -50,7 +50,7 @@ class Predictor(object):
         """
 
         model_hash = retrieve_model_hash_from_id(self.db_engine, model_id)
-        logging.info("Checking for model_hash %s in store", model_hash)
+        logging.debug("Checking for model_hash %s in store", model_hash)
         if self.model_storage_engine.exists(model_hash):
             return self.model_storage_engine.load(model_hash)
 
@@ -154,7 +154,7 @@ class Predictor(object):
         test_label_timespan = matrix_store.metadata["label_timespan"]
 
         if "as_of_date" in matrix_store.index.names:
-            logging.info(
+            logging.debug(
                 "as_of_date found as part of matrix index, using "
                 "index for table as_of_dates"
             )
@@ -190,7 +190,7 @@ class Predictor(object):
                 f.seek(0)
                 postgres_copy.copy_from(f, Prediction_obj, self.db_engine, format="csv")
         else:
-            logging.info(
+            logging.debug(
                 "as_of_date not found as part of matrix index, using "
                 "matrix metadata end_time as as_of_date"
             )
@@ -247,7 +247,7 @@ class Predictor(object):
         prediction_obj = matrix_store.matrix_type.prediction_obj
 
         if not self.replace:
-            logging.info(
+            logging.debug(
                 "replace flag not set for model id %s, matrix %s, looking for old predictions",
                 model_id,
                 matrix_store.uuid,
@@ -258,7 +258,7 @@ class Predictor(object):
                     prediction_obj, session, model_id, matrix_store
                 )
                 if existing_predictions.count() == len(matrix_store.index):
-                    logging.info(
+                    logging.debug(
                         "Found predictions for model id %s, matrix %s, returning saved versions",
                         model_id,
                         matrix_store.uuid,
@@ -268,7 +268,7 @@ class Predictor(object):
                 session.close()
 
         model = self.load_model(model_id)
-        logging.info("Loaded model %s", model_id)
+        logging.debug("Loaded model %s", model_id)
         if not model:
             raise ModelNotFoundError("Model id {} not found".format(model_id))
 
@@ -278,11 +278,11 @@ class Predictor(object):
         predictions_proba = model.predict_proba(
             matrix_store.matrix_with_sorted_columns(train_matrix_columns)
         )
-        logging.info(
+        logging.debug(
             "Generated predictions for model %s, matrix %s", model_id, matrix_store.uuid
         )
         if self.save_predictions:
-            logging.info(
+            logging.debug(
                 "Writing predictions for model %s, matrix %s to database",
                 model_id,
                 matrix_store.uuid,
@@ -295,13 +295,13 @@ class Predictor(object):
                 misc_db_parameters,
                 prediction_obj,
             )
-            logging.info(
+            logging.debug(
                 "Wrote predictions for model %s, matrix %s to database",
                 model_id,
                 matrix_store.uuid,
             )
         else:
-            logging.info(
+            logging.debug(
                 "Skipping prediction database sync for model %s, matrix %s because "
                 "save_predictions was marked False",
                 model_id,

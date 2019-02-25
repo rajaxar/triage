@@ -24,7 +24,10 @@ from triage.experiments import (
 )
 from triage.util.db import create_engine
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s %(process)d %(filename)s:%(funcName)s:%(lineno)d %(levelname)s: %(message)s',
+    level=logging.INFO
+)
 
 
 def natural_number(value):
@@ -263,6 +266,7 @@ class Experiment(Command):
     @cachedproperty
     def experiment(self):
         self.root.setup()  # Loading configuration (if exists)
+
         db_url = self.root.db_url
         config = self._load_config()
         db_engine = create_engine(db_url)

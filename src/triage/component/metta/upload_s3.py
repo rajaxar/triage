@@ -43,7 +43,7 @@ def upload_to_s3(
 
     abs_path_dir = os.path.abspath(directory)
 
-    logging.basicConfig(filename=abs_path_dir + "/upload_s3.log", level=logging.DEBUG)
+    #logging.basicConfig(filename=abs_path_dir + "/upload_s3.log", level=logging.DEBUG)
 
     s3 = boto3.client(
         "s3", aws_access_key_id=access_key_id, aws_secret_access_key=secret_access_key

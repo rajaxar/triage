@@ -52,15 +52,23 @@ class LabelGenerator(object):
 
     def generate_all_labels(self, labels_table, as_of_dates, label_timespans):
         self._create_labels_table(labels_table)
+        num_total_queries = len(as_of_dates) * len(label_timespans)
         logging.info(
-            "Creating labels for %s as of dates and %s label timespans",
+            "Creating labels for %s as of dates and %s label timespans for a total of %s queries",
             len(as_of_dates),
             len(label_timespans),
+            num_total_queries
         )
+        queries_run = 0
+        queries_skipped = 0
+        queries_processed = 0
         for as_of_date in as_of_dates:
             for label_timespan in label_timespans:
+                if queries_processed % 10 == 1:
+                    logging.info("%s queries processed: %s run, %s skipped", queries_processed, queries_run, queries_skipped)
+                queries_processed += 1
                 if not self.replace:
-                    logging.info(
+                    logging.debug(
                         "Looking for existing labels for as of date %s and label timespan %s",
                         as_of_date,
                         label_timespan,
@@ -79,10 +87,11 @@ class LabelGenerator(object):
                         )
                     ))
                     if len(any_existing_labels) == 1:
-                        logging.info("Since nonzero existing labels found, skipping")
+                        logging.debug("Since nonzero existing labels found, skipping")
+                        queries_skipped += 1
                         continue
 
-                logging.info(
+                logging.debug(
                     "Generating labels for as of date %s and label timespan %s",
                     as_of_date,
                     label_timespan,
@@ -92,6 +101,7 @@ class LabelGenerator(object):
                     label_timespan=label_timespan,
                     labels_table=labels_table,
                 )
+                queries_run += 1
         nrows = [
             row[0]
             for row in self.db_engine.execute(

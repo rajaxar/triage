@@ -311,9 +311,9 @@ class ExperimentBase(ABC):
 
         """
         split_definitions = self.chopper.chop_time()
-        logging.info("Computed and stored split definitions: %s", split_definitions)
-        logging.info("\n----TIME SPLIT SUMMARY----\n")
-        logging.info("Number of time splits: {}".format(len(split_definitions)))
+        logging.debug("Computed and stored split definitions: %s", split_definitions)
+        logging.debug("\n----TIME SPLIT SUMMARY----\n")
+        logging.debug("Number of time splits: {}".format(len(split_definitions)))
         for split_index, split in enumerate(split_definitions):
             train_times = split["train_matrix"]["as_of_times"]
             test_times = [
@@ -321,7 +321,7 @@ class ExperimentBase(ABC):
                 for test_matrix in split["test_matrices"]
                 for as_of_time in test_matrix["as_of_times"]
             ]
-            logging.info(
+            logging.debug(
                 """Split index {}:
             Training as_of_time_range: {} to {} ({} total)
             Testing as_of_time range: {} to {} ({} total)\n\n""".format(
@@ -442,7 +442,7 @@ class ExperimentBase(ABC):
                 self.collate_aggregations
             ),
         )
-        logging.info("Computed master feature dictionary: %s", result)
+        logging.debug("Computed master feature dictionary: %s", result)
         return result
 
     @property
@@ -524,7 +524,7 @@ class ExperimentBase(ABC):
         )
 
     def log_split(self, split_num, split):
-        logging.info(
+        logging.debug(
             "Starting train/test for %s out of %s: train range: %s to %s",
             split_num + 1,
             len(self.full_matrix_definitions),

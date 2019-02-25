@@ -238,7 +238,7 @@ class ModelStorageEngine(object):
             model_hash (string) An identifier, unique within this project, for the model
         """
         if self.should_cache:
-            logging.info("Caching model %s", model_hash)
+            logging.debug("Caching model %s", model_hash)
             self.cache[model_hash] = obj
         with self._get_store(model_hash).open("wb") as fd:
             joblib.dump(obj, fd, compress=True)
@@ -252,7 +252,7 @@ class ModelStorageEngine(object):
         Returns: (object) A model object
         """
         if self.should_cache and model_hash in self.cache:
-            logging.info("Returning model %s from cache", model_hash)
+            logging.debug("Returning model %s from cache", model_hash)
             return self.cache[model_hash]
         with self._get_store(model_hash).open("rb") as fd:
             return joblib.load(fd)

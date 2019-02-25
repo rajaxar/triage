@@ -225,7 +225,7 @@ class ModelEvaluator(object):
                     threshold_specified_by_user=threshold_specified_by_user,
                 )
 
-                logging.info(
+                logging.debug(
                     "%s for %s%s, labeled examples %s "
                     "above threshold %s, positive labels %s, value %s",
                     evaluation_table_obj,
@@ -262,7 +262,7 @@ class ModelEvaluator(object):
 
         Returns: (list) results_schema.Evaluation objects
         """
-        logging.info("Creating evaluations for metric group %s", group)
+        logging.debug("Creating evaluations for metric group %s", group)
         parameters = group.get("parameters", [{}])
         generate_evaluations = functools.partial(
             self._evaluations_for_threshold,
@@ -274,7 +274,7 @@ class ModelEvaluator(object):
         )
         evaluations = []
         if "thresholds" not in group:
-            logging.info(
+            logging.debug(
                 "Not a thresholded group, generating evaluation based on all predictions"
             )
             evaluations = evaluations + generate_evaluations(
@@ -284,13 +284,13 @@ class ModelEvaluator(object):
             )
 
         for pct_thresh in group.get("thresholds", {}).get("percentiles", []):
-            logging.info("Processing percent threshold %s", pct_thresh)
+            logging.debug("Processing percent threshold %s", pct_thresh)
             evaluations = evaluations + generate_evaluations(
                 threshold_unit="percentile", threshold_value=pct_thresh
             )
 
         for abs_thresh in group.get("thresholds", {}).get("top_n", []):
-            logging.info("Processing absolute threshold %s", abs_thresh)
+            logging.debug("Processing absolute threshold %s", abs_thresh)
             evaluations = evaluations + generate_evaluations(
                 threshold_unit="top_n", threshold_value=abs_thresh
             )
@@ -359,7 +359,7 @@ class ModelEvaluator(object):
         # Specifies which evaluation table to write to: TestEvaluation or TrainEvaluation
         evaluation_table_obj = matrix_store.matrix_type.evaluation_obj
 
-        logging.info(
+        logging.debug(
             "Generating evaluations for model id %s, evaluation range %s-%s, "
             "as_of_date frequency %s",
             model_id,
@@ -385,7 +385,7 @@ class ModelEvaluator(object):
                 matrix_type.evaluation_obj,
             )
 
-        logging.info("Writing metrics to db: %s table", matrix_type)
+        logging.debug("Writing metrics to db: %s table", matrix_type)
         self._write_to_db(
             model_id,
             evaluation_start_time,
@@ -395,7 +395,7 @@ class ModelEvaluator(object):
             evaluations,
             evaluation_table_obj,
         )
-        logging.info("Done writing metrics to db: %s table", matrix_type)
+        logging.debug("Done writing metrics to db: %s table", matrix_type)
 
     @db_retry
     def _write_to_db(

@@ -45,14 +45,14 @@ class CohortTableGenerator(object):
         self.db_engine.execute(
             "create index on {} (entity_id, as_of_date)".format(self.cohort_table_name)
         )
-        logging.info(
+        logging.debug(
             "Indices created on entity_id and as_of_date for cohort table"
         )
         if not table_has_data(self.cohort_table_name, self.db_engine):
             raise ValueError(self._empty_table_message(as_of_dates))
 
-        logging.info("Cohort table generated at %s", self.cohort_table_name)
-        logging.info("Generating stats on %s", self.cohort_table_name)
+        logging.debug("Cohort table generated at %s", self.cohort_table_name)
+        logging.debug("Generating stats on %s", self.cohort_table_name)
         logging.info(
             "Row count of %s: %s",
             self.cohort_table_name,
@@ -70,9 +70,9 @@ class CohortTableGenerator(object):
                 )
                 """
             )
-            logging.info("Created cohort table")
+            logging.debug("Created cohort table")
         else:
-            logging.info("Not dropping and recreating cohort table because "
+            logging.debug("Not dropping and recreating cohort table because "
                          "replace flag was set to False and table was found to exist")
 
     def _create_and_populate_cohort_table(self, as_of_dates):
@@ -83,10 +83,16 @@ class CohortTableGenerator(object):
         as_of_dates (list of datetime.date): Dates to calculate entity states as of
         """
         self._maybe_create_cohort_table()
-        logging.info("Inserting rows into cohort table")
+        logging.debug("Inserting rows into cohort table")
+        queries_run = 0
+        queries_skipped = 0
+        queries_processed = 0
         for as_of_date in as_of_dates:
+            if queries_processed % 10 == 1:
+                logging.info("%s queries processed: %s run, %s skipped", queries_processed, queries_run, queries_skipped)
+            queries_processed += 1
             formatted_date = f"{as_of_date.isoformat()}"
-            logging.info("Looking for existing cohort rows for as of date %s", as_of_date)
+            logging.debug("Looking for existing cohort rows for as of date %s", as_of_date)
             any_existing = list(self.db_engine.execute(
                 f"""select 1 from {self.cohort_table_name}
                 where as_of_date = '{formatted_date}'
@@ -94,7 +100,8 @@ class CohortTableGenerator(object):
                 """
             ))
             if len(any_existing) == 1:
-                logging.info("Since >0 cohort rows found for date %s, skipping", as_of_date)
+                queries_skipped += 1
+                logging.debug("Since >0 cohort rows found for date %s, skipping", as_of_date)
                 continue
             dated_query = self.query.format(as_of_date=formatted_date)
             full_query = f"""insert into {self.cohort_table_name}
@@ -102,7 +109,8 @@ class CohortTableGenerator(object):
                 from ({dated_query}) q
                 group by 1, 2, 3
             """
-            logging.info("Running cohort query for date: %s, %s", as_of_date, full_query)
+            logging.debug("Running cohort query for date: %s, %s", as_of_date, full_query)
+            queries_run += 1
             self.db_engine.execute(full_query)
 
     def _empty_table_message(self, as_of_dates):
