@@ -3,6 +3,9 @@ import json
 import logging
 import pandas
 from gzip import GzipFile
+import csv
+from contextlib import ExitStack
+from memory_profiler import profile
 
 from sqlalchemy.orm import sessionmaker
 
@@ -212,6 +215,7 @@ class BuilderBase(object):
 
 
 class MatrixBuilder(BuilderBase):
+    @profile
     def build_matrix(
         self,
         as_of_times,
@@ -291,33 +295,33 @@ class MatrixBuilder(BuilderBase):
             "Extracting feature group data from database into file " "for matrix %s",
             matrix_uuid,
         )
-        dataframes = self.load_features_data(
+        design_matrix = self.load_features_data(
             as_of_times, feature_dictionary, entity_date_table_name, matrix_uuid
         )
+        design_matrix['as_of_date'] = pandas.to_datetime(design_matrix['as_of_date'])
+        design_matrix.set_index(['entity_id', 'as_of_date'], inplace=True)
         logging.info(f"Feature data extracted for matrix {matrix_uuid}")
         logging.info(
             "Extracting label data from database into file for " "matrix %s",
             matrix_uuid,
         )
-        labels_df = self.load_labels_data(
+        labels = self.load_labels_data(
             label_name,
             label_type,
             entity_date_table_name,
             matrix_uuid,
             matrix_metadata["label_timespan"],
         )
-        dataframes.insert(0, labels_df)
+        labels = labels[labels.columns[0]]
 
         logging.info(f"Label data extracted for matrix {matrix_uuid}")
         # stitch together the csvs
         logging.info("Merging feature files for matrix %s", matrix_uuid)
-        output = self.merge_feature_csvs(dataframes, matrix_uuid)
         logging.info(f"Features data merged for matrix {matrix_uuid}")
 
         matrix_store.metadata = matrix_metadata
         # store the matrix
-        labels = output.pop(matrix_store.label_column_name)
-        matrix_store.matrix_label_tuple = output, labels
+        matrix_store.matrix_label_tuple = design_matrix, labels
         matrix_store.save()
         logging.info("Matrix %s saved", matrix_uuid)
         # If completely archived, save its information to matrices table
@@ -332,7 +336,7 @@ class MatrixBuilder(BuilderBase):
             matrix_uuid=matrix_uuid,
             matrix_type=matrix_type,
             labeling_window=matrix_metadata["label_timespan"],
-            num_observations=len(output),
+            num_observations=len(design_matrix),
             lookback_duration=lookback,
             feature_start_time=matrix_metadata["feature_start_time"],
             matrix_metadata=json.dumps(matrix_metadata, sort_keys=True, default=str),
@@ -402,6 +406,7 @@ class MatrixBuilder(BuilderBase):
 
         return self.query_to_df(labels_query)
 
+    @profile
     def load_features_data(
         self, as_of_times, feature_dictionary, entity_date_table_name, matrix_uuid
     ):
@@ -424,7 +429,7 @@ class MatrixBuilder(BuilderBase):
         :rtype: tuple
         """
         # iterate! for each table, make query, write csv, save feature & file names
-        feature_dfs = []
+        fhs = []
         for feature_table_name, feature_names in feature_dictionary.items():
             logging.info("Retrieving feature data from %s", feature_table_name)
             features_query = self._outer_join_query(
@@ -442,9 +447,34 @@ class MatrixBuilder(BuilderBase):
                 # database encounters any during the outer join
                 right_column_selections=[', "{0}"'.format(fn) for fn in feature_names],
             )
-            feature_dfs.append(self.query_to_df(features_query))
 
-        return feature_dfs
+            copy_sql = "COPY ({query}) TO STDOUT WITH CSV {head}".format(
+                query=features_query, head="HEADER"
+            )
+            conn = self.db_engine.raw_connection()
+            cur = conn.cursor()
+            store = io.BytesIO()
+            with GzipFile(fileobj=store, mode='w') as out:
+                cur.copy_expert(copy_sql, out)
+            store.seek(0)
+            fhs.append(store)
+        return fhs
+        big_fh = io.BytesIO()
+        with GzipFile(fileobj=big_fh, mode='w') as out:
+            writer = None
+            with ExitStack() as stack:
+                readers = [csv.DictReader(io.TextIOWrapper(stack.enter_context(GzipFile(fileobj=in_fh)))) for in_fh in fhs]
+                for record_chunks in zip(*readers):
+                    new_dict = record_chunks[0]
+                    for chunk in record_chunks[1:]:
+                        new_dict.update(chunk)
+                    if not writer:
+                        writer = csv.DictWriter(io.TextIOWrapper(out, write_through=True), fieldnames=new_dict.keys())
+                        writer.writeheader()
+                    writer.writerow(new_dict)
+        del fhs
+        big_fh.seek(0)
+        return big_fh
 
     def query_to_df(self, query_string, header="HEADER"):
         """ Given a query, write the requested data to csv.
