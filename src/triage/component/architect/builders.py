@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import pandas
+from gzip import GzipFile
 
 from sqlalchemy.orm import sessionmaker
 
@@ -465,10 +466,12 @@ class MatrixBuilder(BuilderBase):
         )
         conn = self.db_engine.raw_connection()
         cur = conn.cursor()
-        out = io.StringIO()
-        cur.copy_expert(copy_sql, out)
-        out.seek(0)
-        df = pandas.read_csv(out, parse_dates=["as_of_date"])
+        store = io.BytesIO()
+        with GzipFile(fileobj=store, mode='w') as out:
+            cur.copy_expert(copy_sql, out)
+        store.seek(0)
+        infile = GzipFile(fileobj=store, mode='r')
+        df = pandas.read_csv(infile, parse_dates=["as_of_date"])
         df.set_index(["entity_id", "as_of_date"], inplace=True)
         return downcast_matrix(df)
 
