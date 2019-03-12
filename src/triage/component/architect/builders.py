@@ -6,6 +6,8 @@ from gzip import GzipFile
 import csv
 from contextlib import ExitStack
 from memory_profiler import profile
+import shutil
+import yaml
 
 from sqlalchemy.orm import sessionmaker
 
@@ -215,7 +217,6 @@ class BuilderBase(object):
 
 
 class MatrixBuilder(BuilderBase):
-    @profile
     def build_matrix(
         self,
         as_of_times,
@@ -295,35 +296,21 @@ class MatrixBuilder(BuilderBase):
             "Extracting feature group data from database into file " "for matrix %s",
             matrix_uuid,
         )
-        design_matrix = self.load_features_data(
-            as_of_times, feature_dictionary, entity_date_table_name, matrix_uuid
-        )
-        design_matrix['as_of_date'] = pandas.to_datetime(design_matrix['as_of_date'])
-        design_matrix.set_index(['entity_id', 'as_of_date'], inplace=True)
-        logging.info(f"Feature data extracted for matrix {matrix_uuid}")
-        logging.info(
-            "Extracting label data from database into file for " "matrix %s",
-            matrix_uuid,
-        )
-        labels = self.load_labels_data(
+        features_queries = self.features_queries(feature_dictionary, entity_date_table_name)
+        labels_query = self.get_labels_query(
             label_name,
             label_type,
             entity_date_table_name,
-            matrix_uuid,
             matrix_metadata["label_timespan"],
         )
-        labels = labels[labels.columns[0]]
+        all_queries = features_queries + [labels_query]
+        big_fh = self.big_fh(all_queries)
+        with matrix_store.matrix_base_store.open('wb') as fd:
+            shutil.copyfileobj(big_fh, fd)
 
-        logging.info(f"Label data extracted for matrix {matrix_uuid}")
-        # stitch together the csvs
-        logging.info("Merging feature files for matrix %s", matrix_uuid)
-        logging.info(f"Features data merged for matrix {matrix_uuid}")
+        with matrix_store.metadata_base_store.open('wb') as fd:
+            yaml.dump(matrix_metadata, fd, encoding="utf-8")
 
-        matrix_store.metadata = matrix_metadata
-        # store the matrix
-        matrix_store.matrix_label_tuple = design_matrix, labels
-        matrix_store.save()
-        logging.info("Matrix %s saved", matrix_uuid)
         # If completely archived, save its information to matrices table
         # At this point, existence of matrix already tested, so no need to delete from db
         if matrix_type == "train":
@@ -336,7 +323,7 @@ class MatrixBuilder(BuilderBase):
             matrix_uuid=matrix_uuid,
             matrix_type=matrix_type,
             labeling_window=matrix_metadata["label_timespan"],
-            num_observations=len(design_matrix),
+            num_observations=5,
             lookback_duration=lookback,
             feature_start_time=matrix_metadata["feature_start_time"],
             matrix_metadata=json.dumps(matrix_metadata, sort_keys=True, default=str),
@@ -347,12 +334,11 @@ class MatrixBuilder(BuilderBase):
         session.commit()
         session.close()
 
-    def load_labels_data(
+    def get_labels_query(
         self,
         label_name,
         label_type,
         entity_date_table_name,
-        matrix_uuid,
         label_timespan,
     ):
         """ Query the labels table and write the data to disk in csv format.
@@ -404,11 +390,10 @@ class MatrixBuilder(BuilderBase):
             ),
         )
 
-        return self.query_to_df(labels_query)
+        return labels_query
 
-    @profile
-    def load_features_data(
-        self, as_of_times, feature_dictionary, entity_date_table_name, matrix_uuid
+    def features_queries(
+        self, feature_dictionary, entity_date_table_name
     ):
         """ Loop over tables in features schema, writing the data from each to a
         csv. Return the full list of feature csv names and the list of all
@@ -429,7 +414,7 @@ class MatrixBuilder(BuilderBase):
         :rtype: tuple
         """
         # iterate! for each table, make query, write csv, save feature & file names
-        fhs = []
+        feature_queries = []
         for feature_table_name, feature_names in feature_dictionary.items():
             logging.info("Retrieving feature data from %s", feature_table_name)
             features_query = self._outer_join_query(
@@ -447,9 +432,14 @@ class MatrixBuilder(BuilderBase):
                 # database encounters any during the outer join
                 right_column_selections=[', "{0}"'.format(fn) for fn in feature_names],
             )
+            feature_queries.append(features_query)
+        return feature_queries
 
+    def big_fh(self, queries):
+        fhs = []
+        for query in queries:
             copy_sql = "COPY ({query}) TO STDOUT WITH CSV {head}".format(
-                query=features_query, head="HEADER"
+                query=query, head="HEADER"
             )
             conn = self.db_engine.raw_connection()
             cur = conn.cursor()
@@ -458,7 +448,6 @@ class MatrixBuilder(BuilderBase):
                 cur.copy_expert(copy_sql, out)
             store.seek(0)
             fhs.append(store)
-        return fhs
         big_fh = io.BytesIO()
         with GzipFile(fileobj=big_fh, mode='w') as out:
             writer = None
