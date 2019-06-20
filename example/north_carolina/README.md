@@ -20,7 +20,7 @@ Requirements:
 
 Triage feature generation and predictive modeling for recidivism is performed on data after light manipulation in Python to produce three datasets containing information on specific on inmate sentences, offenses, and disciplinary infractions.
 
-Files:
+### Files:
 - `generate_tables`:
     - `create_recidivism_set_unprocessed.ipynb` - Jupyter notebook which processes the raw data into three datasets for predicting recidivism with triage
     - `create_separated_ables.sql` - SQL queries to create Postgres database tables corresponding to output from `create_recidivism_set_unprocessed.ipynb`.
