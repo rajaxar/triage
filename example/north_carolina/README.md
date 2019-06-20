@@ -21,20 +21,20 @@ Requirements:
 Triage feature generation and predictive modeling for recidivism is performed on data after light manipulation in Python to produce three datasets containing information on specific on inmate sentences, offenses, and disciplinary infractions.
 
 ### Files:
-- `generate_tables`:
-    - `create_recidivism_set_unprocessed.ipynb` - Jupyter notebook which processes the raw data into three datasets for predicting recidivism with triage
-    - `create_separated_ables.sql` - SQL queries to create Postgres database tables corresponding to output from `create_recidivism_set_unprocessed.ipynb`.
-    - `load_nc_db.py` - CLI utility for uploading `.pkl` outputs from  `create_separated_ables.sql` to Postgres database tables.
-- `data`:
+- `generate_tables` directory:
+    - `create_recidivism_set_unprocessed.ipynb` - Jupyter notebook which processes the raw data into three datasets for predicting recidivism with Triage
+    - `create_separated_ables.sql` - SQL queries to create Postgres database tables corresponding to output from `create_recidivism_set_unprocessed.ipynb`
+    - `load_nc_db.py` - CLI utility for uploading `.pkl` outputs from  `create_separated_ables.sql` to Postgres database tables
+- `data` directory:
     - Preparation
         - `ncdoc_des2csv.sh` - downloads and processes one zip file into a CSV
         - `ncdoc_parallel.sh` - runs `ncdoc_des2csv.sh` in parallel for all the necessary files
         - `fixed_width_definitions_format.csv` - gives necessary data for unzipping files into CSVs
     - Outputs
-        - `sentences_table.csv.zip` - High-level on inmate sentences from 1950 to April 2019. Output of `create_recidivism_set_unprocessed.ipynb`.    
-        - `offense_counts_table.csv.zip` - Detail on specific offenses related to inmate sentences. Output of `create_recidivism_set_unprocessed.ipynb`.
-        - `discipline_table.csv.zip` - Detail on disciplinary infractions occurring during inmate sentences. Output of `create_recidivism_set_unprocessed.ipynb`.
-- `triage_configs`:
+        - `sentences_table.csv.zip` - High-level on inmate sentences from 1950 to April 2019. Output of `create_recidivism_set_unprocessed.ipynb`
+        - `offense_counts_table.csv.zip` - Detail on specific offenses related to inmate sentences. Output of `create_recidivism_set_unprocessed.ipynb`
+        - `discipline_table.csv.zip` - Detail on disciplinary infractions occurring during inmate sentences. Output of `create_recidivism_set_unprocessed.ipynb`
+- `triage_configs` directory:
     - `nc_recid_sep_tables.yaml` - Triage configuration file to run experiments on the three data tables
 
 
