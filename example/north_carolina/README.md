@@ -18,7 +18,9 @@ Requirements:
 
 ## Applying Triage
 
-Triage feature generation and predictive modeling for recidivism is performed on data after light manipulation in Python to produce three datasets containing information on specific on inmate sentences, offenses, and disciplinary infractions.
+Feature generation and predictive modeling for recidivism is performed via Triage (previous North Carolina inmate exploration involved selected Python-generated features and time series splits) after light manipulation in Python to produce three datasets containing information on specific on inmate sentences, offenses, and disciplinary infractions. 
+
+
 
 ### Files:
 - `generate_tables` directory:
