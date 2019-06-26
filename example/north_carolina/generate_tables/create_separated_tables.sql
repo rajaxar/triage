@@ -56,3 +56,10 @@ create table cleaned.offenses(
 	SENTENCING_PENALTY_CLASS_CODE varchar(25),
 	PRIOR_RECORD_LEVEL_CODE varchar(9));
 
+
+  
+CREATE TABLE cleaned.infractions AS
+select s.entity_id, d.*
+from cleaned.discipline as d
+left join cleaned.sentences as s
+    on s.inmate_doc_number = d.inmate_doc_number and s.inmate_commitment_prefix = d.inmate_commitment_prefix;
