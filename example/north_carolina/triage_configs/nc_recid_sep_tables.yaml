@@ -4,7 +4,7 @@ model_comment: 'nc_recidivism: initial_test'
 
 user_metadata:
     label_definition: 'recidivated'
-    experiment_type: 'recidivism_prediction'
+    experiment_type: 'exploratory'
     description: |
       Baseline calculation
     purpose: 'baseline'
@@ -26,11 +26,11 @@ model_group_keys:
   - 'max_training_history'
   - 'label_definition'
   - 'experiment_type'
-  - 'org'
-  - 'team'
-  - 'author'
-  - 'purpose'
-  - 'etl_date'
+  # - 'org'
+  # - 'team'
+  # - 'author'
+  # - 'purpose'
+  # - 'etl_date'
   
  
 # TIME SPLITTING
@@ -39,21 +39,22 @@ model_group_keys:
 temporal_config:
     feature_start_time: '1975-01-01' # earliest date included in features
     feature_end_time: '2019-04-15'   # latest date included in features
-    label_start_time: '1950-03-30' # earliest date for which labels are avialable
+    label_start_time: '1975-01-02' # earliest date for which labels are avialable
     label_end_time: '2019-04-16' # day AFTER last label date (all dates in any model are < this date)
-    model_update_frequency: '1year' # how frequently to retrain models
-    training_as_of_date_frequencies: '1year' # time between as of dates for same entity in train matrix
-    test_as_of_date_frequencies: '1year' # time between as of dates for same entity in test matrix
+    model_update_frequency: '1y' # how frequently to retrain models
+    training_as_of_date_frequencies: '1y' # time between as of dates for same entity in train matrix
+    test_as_of_date_frequencies: '1y' # time between as of dates for same entity in test matrix
     max_training_histories: ['6y'] # length of time included in a train matrix
     test_durations: ['7day'] # length of time included in a test matrix (0 days will give a single prediction immediately after training end)
-    training_label_timespans: ['3y'] # time period across which outcomes are labeled in train matrices
-    test_label_timespans: ['3y'] # time period across which outcomes are labeled in test matrices
+    training_label_timespans: ['1y'] # time period across which outcomes are labeled in train matrices
+    test_label_timespans: ['1y'] # time period across which outcomes are labeled in test matrices
 
 
 # COHORT CONFIG
 # Cohorts are configured by passing a query with placeholders for the 'as_of_date'.
 #
-# The 'query' key should have a query, parameterized with an '{as_of_date}', to select the entity_ids that should be included for a given date. The {as_of_date} will be replaced with each as_of_date that the experiment needs. The returned 'entity_id' must be an integer.
+# The 'query' key should have a query, parameterized with an '{as_of_date}', to select the entity_ids that should be included for a given date. The {as_of_date} will be replaced with each as_of_date that the experiment needs. 
+# The returned 'entity_id' must be an integer.
 #
 # You may enter a 'name' for your configuration.
 # This will be included in the metadata for each matrix and used to group models
@@ -61,13 +62,19 @@ temporal_config:
 #
 cohort_config:
     query: |
-        with start_sentence as (select distinct on (inmate_doc_number) *
+        with sentence_info as (select distinct on (inmate_doc_number) *
         from cleaned.sentences 
         where sentence_start < '{as_of_date}'::date
-        order by inmate_doc_number, sentence_start desc)
-        select inmate_doc_number as entity_id
-        from start_sentence
-        where sentence_end <@ daterange(('{as_of_date}'::date - interval '3year')::date, '{as_of_date}'::date);        
+        order by inmate_doc_number, sentence_start desc),
+        all_in as (select distinct inmate_doc_number from cleaned.sentences),
+        numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)  
+
+        -- but released in last 3 years
+        select inmate_num::int as entity_id
+        from sentence_info s left join numbered_entities n
+        on s.inmate_doc_number = n.inmate_doc_number
+        where sentence_end <@ daterange(('{as_of_date}'::date - interval '3year')::date, '{as_of_date}'::date);
+
     name: 'recently_released'
 
 
@@ -89,17 +96,46 @@ cohort_config:
 label_config:
     query: |
          select inmate_doc_number as entity_id, 1 as outcome 
-         from cleaned.nc_recidivism
-         where sentence_start::date <@ daterange('{as_of_date}'::date, ('{as_of_date}'::date + interval '3year')::date)
+         from cleaned.sentences
+         where sentence_start::date <@ daterange('{as_of_date}'::date, ('{as_of_date}'::date + interval '3year')::date) -- if they have a new start date after the beginning of the period, they recidivated (as only those inmates recently released are part of the cohort)
          group by entity_id;
     name: 'recidivated'
     include_missing_labels_in_train_as: False
 
 
 feature_aggregations:
+
     -
-        prefix: 'nc_recid'
-        from_obj: 'cleaned.sentences'
+        prefix: 'incarcerations'
+        from_obj: 'cleaned.offenses'
+        knowledge_date_column: 'date'
+
+        aggregates_imputation:
+          count:
+            type: 'zero_noflag'
+
+        aggregates:
+          -
+            quantity:
+              total: "*"
+            metrics:
+              - 'count'
+
+        intervals: ['all']
+
+        groups:
+          - 'entity_id'
+
+        feature_group_definition:
+        prefix:
+         - 'incarcerations'
+
+        feature_group_strategies: ['all']
+
+    -
+        prefix: 'age'
+        from_obj: |
+            select inmate_doc_number::int as entity_id, case when sentence_end - birth_date > 0 then sentence_end - birth_date else null as age from cleaned.sentences
         # The date column to use for specifying which records to include
         # in temporal features. It is important that the column used specifies
         # the date at which the event is known about, which may be different
@@ -112,8 +148,8 @@ feature_aggregations:
         # You must specified at least one of the top-level or feature-level imputation
         # to cover ever feature being defined.
         aggregates_imputation:
-            count:
-                type: 'zero_noflag'
+            all:
+                type: 'mean'
 
 
         # aggregates and categoricals define the actual features created. So
@@ -123,7 +159,8 @@ feature_aggregations:
         # sort, and the list of metrics are applied to each quantity
         aggregates:
             -
-                quantity: minimum_sentence_length::int
+                quantity: 
+                    total: age::int
                 # Imputation rules specified at the level of specific features
                 # will take precedence over the higer-level rules specified
                 # above. Note that the 'count' and 'sum' metrics will be
@@ -209,7 +246,7 @@ feature_aggregations:
                 imputation:
                     all:
                         type: 'null_category'
-                choice_query: 'select distinct shape from cool_stuff'
+                choice_query: 'select distinct inmate_race_code from cleaned.sentences'
                 metrics:
                     - 'sum'
                     - 'mean'

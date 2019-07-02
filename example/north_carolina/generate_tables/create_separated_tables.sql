@@ -3,7 +3,7 @@ drop table if exists cleaned.discipline cascade;
 drop table if exists cleaned.offenses cascade;
 
 create table cleaned.sentences(
-	entity_id int primary key not null,
+	sentence_id int primary key not null,
 	INMATE_DOC_NUMBER varchar(7) not null,
 	INMATE_COMMITMENT_PREFIX varchar(2) not null,
 	SENTENCE_START date,
@@ -24,6 +24,7 @@ create table cleaned.sentences(
 
 create table cleaned.discipline(
 	record_id int primary key not null,
+	sentence_id int not null references cleaned.sentences(sentence_id),
 	INMATE_DOC_NUMBER varchar(7) not null,
 	INMATE_COMMITMENT_PREFIX varchar(2) not null,
 	SENTENCE_START date,
@@ -37,7 +38,7 @@ create table cleaned.discipline(
 
 create table cleaned.offenses(
 	offense_id int not null primary key,
-	entity_id int not null references cleaned.sentences(entity_id),
+	sentence_id int not null references cleaned.sentences(sentence_id),
 	INMATE_DOC_NUMBER varchar(7) not null,
 	INMATE_COMMITMENT_PREFIX varchar(2),
 	NUMBER_OF_COUNTS int,
@@ -58,8 +59,8 @@ create table cleaned.offenses(
 
 
   
-CREATE TABLE cleaned.infractions AS
-select s.entity_id, d.*
-from cleaned.discipline as d
-left join cleaned.sentences as s
-    on s.inmate_doc_number = d.inmate_doc_number and s.inmate_commitment_prefix = d.inmate_commitment_prefix;
+-- CREATE TABLE cleaned.infractions AS
+-- select s.sentence_id, d.*
+-- from cleaned.discipline as d
+-- left join cleaned.sentences as s
+--     on s.inmate_doc_number = d.inmate_doc_number and s.inmate_commitment_prefix = d.inmate_commitment_prefix;
