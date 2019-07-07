@@ -111,7 +111,7 @@ feature_aggregations:
           with all_in as (select distinct inmate_doc_number from cleaned.sentences),
           numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
           (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, s.sentence_start, 
-          s.sentence_end, s.inmate_race_code, s.inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, 
+          s.sentence_end, s.inmate_race_code, s.inmate_gender_code, inmate_birth_date, extract(year from s.inmate_birth_date) as birth_year, 
           case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
           s.sentence_total_counts, s.new_period_of_incarceration_fl, s.new_period_of_supervision_flag, s.p_p_commitment_status_flag, 
           s.minimum_sentence_length, s.maximum_sentence_length, s.parole_supervision_begin_date, s.parole_discharge_date, s.length_of_supervision
@@ -138,7 +138,7 @@ feature_aggregations:
 
 
      -
-        prefix: 'gender'
+        prefix: 'demographics'
         from_obj: |
           with all_in as (select distinct inmate_doc_number from cleaned.sentences),
           numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
@@ -149,6 +149,16 @@ feature_aggregations:
           minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision
           from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
         knowledge_date_column: 'sentence_start'
+
+        aggregates_imputation:
+            all:
+              type: 'mean'
+
+        aggregates:
+          - # age in years
+          quantity:
+            age: "extract(year from release_age('{collate_date}'::date, inmate_birth_date::date))"
+        metrics: ['max']
 
         categoricals_imputation:
             all:
@@ -459,8 +469,8 @@ scoring:
         -
           metrics: [precision@, recall@]
           thresholds:
-            percentiles: [1.0, 2.0, 3.0, 4.0, 5.0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
-            top_n: [1, 5, 10, 25, 50, 100, 250, 500, 1000]
+            percentiles: [1.0, 5.0, 10.0, 20.0]
+            top_n: [100, 250, 500, 1000, 2500, 5000]
 
     training_metric_groups:
       -
@@ -468,5 +478,5 @@ scoring:
       -
         metrics: [precision@, recall@]
         thresholds:
-          percentiles: [1.0, 2.0, 3.0, 4.0, 5.0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
-          top_n: [1, 5, 10, 25, 50, 100, 250, 500, 1000]
+          percentiles: [1.0, 5.0, 10.0, 20.0]
+          top_n: [100, 250, 500, 1000, 2500, 5000]
