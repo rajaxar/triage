@@ -95,10 +95,10 @@ cohort_config:
 # under the 'label_name' key. The default label_name is 'outcome'.
 label_config:
     query: |
-         select inmate_doc_number as entity_id, 1 as outcome 
-         from cleaned.sentences
-         where sentence_start::date <@ daterange('{as_of_date}'::date, ('{as_of_date}'::date + interval '3year')::date) -- if they have a new start date after the beginning of the period, they recidivated (as only those inmates recently released are part of the cohort)
-         group by entity_id;
+      select inmate_doc_number as entity_id, 1 as outcome 
+      from cleaned.sentences
+      where sentence_start::date <@ daterange('{as_of_date}'::date, ('{as_of_date}'::date + interval '3year')::date) -- if they have a new start date after the beginning of the period, they recidivated (as only those inmates recently released are part of the cohort)
+      group by entity_id;
     name: 'recidivated'
     include_missing_labels_in_train_as: False
 
@@ -106,192 +106,350 @@ label_config:
 feature_aggregations:
 
     -
-        prefix: 'incarcerations'
-        from_obj: 'cleaned.offenses'
-        knowledge_date_column: 'date'
+        prefix: 'sentences'
+        from_obj: |
+          with all_in as (select distinct inmate_doc_number from cleaned.sentences),
+          numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
+          (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, s.sentence_start, 
+          s.sentence_end, s.inmate_race_code, s.inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, 
+          case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
+          s.sentence_total_counts, s.new_period_of_incarceration_fl, s.new_period_of_supervision_flag, s.p_p_commitment_status_flag, 
+          s.minimum_sentence_length, s.maximum_sentence_length, s.parole_supervision_begin_date, s.parole_discharge_date, s.length_of_supervision
+          from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number;) as inmate_sentences
+
+        knowledge_date_column: 'sentence_end'  # confirm with kit: should this be sentence start, as that is when we know someone has recidivated?
 
         aggregates_imputation:
-          count:
-            type: 'zero_noflag'
+            all:
+              type: 'mean'
 
         aggregates:
-          -
+          - # number of sentences
             quantity:
               total: "*"
             metrics:
               - 'count'
 
-        intervals: ['all']
+        intervals: ['1y', '3y', 'all']
+
 
         groups:
           - 'entity_id'
 
-        feature_group_definition:
-        prefix:
-         - 'incarcerations'
 
-        feature_group_strategies: ['all']
-
-    -
-        prefix: 'age'
+     -
+        prefix: 'gender'
         from_obj: |
-            select inmate_doc_number::int as entity_id, case when sentence_end - birth_date > 0 then sentence_end - birth_date else null as age from cleaned.sentences
-        # The date column to use for specifying which records to include
-        # in temporal features. It is important that the column used specifies
-        # the date at which the event is known about, which may be different
-        # from the date the event happened.
-        knowledge_date_column: 'sentence_end'
+          with all_in as (select distinct inmate_doc_number from cleaned.sentences),
+          numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
+          (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, 
+          sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, 
+          case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
+          sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, 
+          minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision
+          from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
+        knowledge_date_column: 'sentence_start'
 
-        # top-level imputation rules that will apply to all aggregates functions
-        # can also specify categoricals_imputation or array_categoricals_imputation
-        #
-        # You must specified at least one of the top-level or feature-level imputation
-        # to cover ever feature being defined.
-        aggregates_imputation:
+        categoricals_imputation:
             all:
-                type: 'mean'
-
-
-        # aggregates and categoricals define the actual features created. So
-        # at least one is required
-        #
-        # Aggregates of numerical columns. Each quantity is a number of some
-        # sort, and the list of metrics are applied to each quantity
-        aggregates:
-            -
-                quantity: 
-                    total: age::int
-                # Imputation rules specified at the level of specific features
-                # will take precedence over the higer-level rules specified
-                # above. Note that the 'count' and 'sum' metrics will be
-                # imputed differently here.
-                imputation:
-                    mean:
-                        type: 'zero_noflag'
-                    sum:
-                        type: 'zero_noflag'
-                metrics:
-                    - 'mean'
-                    - 'sum'
-            -
-                quantity: maximum_sentence_length::int
-                # Imputation rules specified at the level of specific features
-                # will take precedence over the higer-level rules specified
-                # above. Note that the 'count' and 'sum' metrics will be
-                # imputed differently here.
-                imputation:
-                    mean:
-                       type: 'zero_noflag'
-                    sum:
-                        type: 'zero_noflag'
-                metrics:
-                    - 'mean'
-                    - 'sum'
-            - 
-                quantity: previous_commitments::int
-                # Imputation rules specified at the level of specific features
-                # will take precedence over the higer-level rules specified
-                # above. Note that the 'count' and 'sum' metrics will be
-                # imputed differently here.
-                imputation:
-                    mean:
-                       type: 'zero_noflag'
-                    sum:
-                        type: 'zero_noflag'
-                metrics:
-                    - 'mean'
-                    - 'sum'
-            -
-                # since we're specifying `aggregates_imputation` above,
-                # a feature-specific imputation rule can be omitted
-                quantity: parole_days::int
-                imputation:
-                    all:
-                       type: 'zero_noflag'
-                metrics:
-                    - 'mean'
-                    - 'sum'
-            -
-                # since we're specifying `aggregates_imputation` above,
-                # a feature-specific imputation rule can be omitted
-                quantity: age_at_release::int
-                imputation:
-                    all:
-                       type: 'zero_noflag'
-                metrics:
-                    - 'mean'
-                    - 'sum'
-        # Categorical features. The column given can be of any type, but the
-        # choices must comparable to that type for equality within SQL
-        # The result will be one feature for each choice/metric combination
+              type: 'zero'
+              
         categoricals:
-            -
-                column: 'inmate_commitment_prefix'
-                # note that we haven't specified a top level `categoricals_imputation`
-                # set of rules, so we have to include feature-specific imputation
-                # rules for both of our categoricals here.
-                imputation:
-                    sum:
-                        type: 'null_category'
-                    mean:
-                        type: 'mean'
+            - # gender 
+                column: inmate_gender_code
+                choices: ['MALE', 'FEMALE']
                 metrics:
                     - 'sum'
-                    - 'mean'
-            -
-                column: 'inmate_race_code'
-                # as with the top-level imputation rules, `all` can be used
-                # for the feature-level rules to specify the same type of
-                # imputation for all aggregation functions
-                imputation:
-                    all:
-                        type: 'null_category'
-                choice_query: 'select distinct inmate_race_code from cleaned.sentences'
-                metrics:
-                    - 'sum'
-                    - 'mean'
-            - 
-                column: 'inmate_gender_code'
-                # as with the top-level imputation rules, `all` can be used
-                # for the feature-level rules to specify the same type of
-                # imputation for all aggregation functions
-                imputation:
-                    all:
-                        type: 'null_category'
-                choices:
-                    - 'MALE'
-                    - 'FEMALE'
-                metrics:
-                    - 'sum'
-                    - 'mean'
-            - 
-                column: 'new_period_of_incarceration_fl'
-                # as with the top-level imputation rules, `all` can be used
-                # for the feature-level rules to specify the same type of
-                # imputation for all aggregation functions
-                imputation:
-                    all:
-                        type: 'null_category'
-                metrics:
-                    - 'sum'
-                    - 'mean'
-        # The time intervals over which to aggregate features
-        intervals:
-            - '1 year'
-        # A list of different columns to separately group by
+                    - 'avg'
+                    - 'max'
+
+        intervals: ['1y', '3y', all']
+
+
         groups:
             - 'entity_id'
 
 
-feature_group_strategies: ['all']
+    -
+        prefix: 'age'
+        from_obj: |
+          with all_in as (select distinct inmate_doc_number from cleaned.sentences),
+          numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
+          (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, 
+          sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, 
+          case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
+          sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, 
+          minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision
+          from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
+        knowledge_date_column: 'event_date'
 
+        categoricals_imputation:
+            all:
+              type: 'mean'
+
+        categoricals:
+            -
+                column: release_age
+                metrics:
+                    - 'avg'
+                    - 'sum'
+
+        intervals: ['1y', '5y', 'all']
+
+
+        groups:
+            - 'entity_id'
+
+
+     -
+        prefix: 'race'
+        from_obj: |
+          with all_in as (select distinct inmate_doc_number from cleaned.sentences),
+          numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
+          (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, 
+          sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, 
+          case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
+          sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, 
+          minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision
+          from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
+
+        knowledge_date_column: 'sentence_end'
+
+        categoricals_imputation:
+            all:
+              type: 'zero'
+              
+        categoricals:
+            - # race 
+                column: inmate_race_code
+                choice_query: 'select distinct inmate_race_code from cleaned.sentences'
+                metrics:
+                    - 'sum'
+                    - 'avg'
+                    - 'max'
+
+        intervals: ['1y', '3y', all']
+
+
+        groups:
+            - 'entity_id'
+
+     -
+        prefix: 'sentence_detail'
+        from_obj: |
+          with all_in as (select distinct inmate_doc_number from cleaned.sentences),
+          numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
+          (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, 
+          sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, 
+          case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
+          sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, 
+          minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision
+          from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
+
+
+        knowledge_date_column: 'sentence_end'
+
+        aggregates_imputation:
+            all:
+              type: 'mean'
+
+        aggregates:
+          - # new_supervision
+              quantity:
+                new_supervision_bool: "case when new_period_of_supervision_flag = 'Y' then 1 else 0 end"
+              metrics:
+                  - 'avg'
+                  - 'sum'
+
+          - # new_incarceration
+              quantity:
+                new_incarceration_bool: "case when new_period_of_incarceration_fl = 'Y' then 1 else 0 end"
+              metrics:
+                  - 'avg'
+                  - 'sum'
+
+          - # parole_following
+              quantity:
+                parole_bool: "case when parole_supervision_begin_date is null then 0 else 1 end"
+              metrics:
+                  - 'avg'
+                  - 'sum'
+
+        intervals: ['1y', '3y', 'all']
+
+
+        groups:
+            - 'entity_id'
+
+
+     - 
+        prefix: 'offense_detail'
+        from_obj: |
+           with all_in as (select distinct inmate_doc_number from cleaned.sentences),
+           numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
+           (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, sentence_start, 
+           sentence_end, o.primary_felony_misdemeanor_cd, o.serving_min_or_max_term_code, o.primary_offense_code, o.county_of_conviction_code, o.court_type_code, o.offense_qualifier_code, o.sentencing_penalty_class_code, o.prior_record_level_code
+           from cleaned.sentences s 
+           left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number
+           left join cleaned.offenses o on s.entity_id = o.entity_id) as inmate_offenses
+
+        knowledge_date_column: 'sentence_end'
+
+        aggregates_imputation:
+            all:
+              type: 'mean'
+
+        aggregates:
+          - # felony_offense
+              quantity:
+                felony_bool: "case when primary_felony_misdemeanor_cd = 'FELON' then 1 else 0 end"
+              imputation:
+                mean:
+                    type: 'zero_noflag'
+                sum:
+                    type: 'zero_noflag'
+              metrics:
+                  - 'avg'
+                  - 'sum'
+
+          - # max_term
+              quantity:
+                max_term_bool: "case when serving_min_or_max_term_code = 'MAX.TERM:' then 1 else 0 end"
+              imputation:
+                mean:
+                    type: 'zero_noflag'
+                sum:
+                    type: 'zero_noflag'
+              metrics:
+                  - 'avg'
+                  - 'sum'
+
+        categoricals_imputation:
+            all:
+              type: 'mean'
+
+        categoricals:
+            - # offense location
+                column: county_of_conviction_code
+                choice_query: 'select distinct county_of_conviction_code from cleaned.offenses'
+                metrics:
+                    - 'sum'
+                    - 'avg'
+                    - 'max'
+
+            - # type of offense 
+                column: primary_offense_code
+                choice_query: 'select distinct primary_offense_code from cleaned.offenses'
+                metrics:
+                    - 'sum'
+                    - 'avg'
+                    - 'max'
+
+            - # offense qualifier
+                column: offense_qualifier_code
+                choice_query: 'select distinct offense_qualifier_code from cleaned.offenses'
+                metrics:
+                    - 'sum'
+                    - 'avg'
+                    - 'max'
+
+            - # prior record level
+                column: prior_record_level_code
+                choice_query: 'select distinct prior_record_level_code from cleaned.offenses'
+                metrics:
+                    - 'sum'
+                    - 'avg'
+                    - 'max'
+        
+        intervals: ['1y', '3y', 'all']
+
+        groups:
+          - 'entity_id'
+          - 'sentence_id'
+
+- 
+        prefix: 'infractions'
+        from_obj: |
+           with all_in as (select distinct inmate_doc_number from cleaned.sentences),
+           numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
+           (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, sentence_start, 
+           sentence_end, disciplinary_infraction_code, disci_segregation_time_days, inmate_plea_re_infraction, disciinfraction_verdict_code
+           from cleaned.sentences s 
+           left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number
+           left join cleaned.infractions i on s.entity_id = i.entity_id) as inmate_infractions
+
+        knowledge_date_column: 'sentence_end'
+
+        aggregates_imputation:
+            all:
+              type: 'mean'
+
+        aggregates:
+
+          - # number of infractions
+            quantity:
+              total: "*"
+            metrics:
+              - 'count'
+              - 'max'
+
+          - # infraction guilty plea
+              quantity:
+                guilty_plea_bool: "case when inmate_plea_re_infraction = 'GUILTY' then 1 else 0 end"
+              imputation:
+                mean:
+                    type: 'zero_noflag'
+                sum:
+                    type: 'zero_noflag'
+              metrics:
+                  - 'avg'
+                  - 'sum'
+
+          - # infraction guilty verdict
+              quantity:
+                guilty_verdict_bool: "case when disciinfraction_verdict_code = 'GUILTY' then 1 else 0 end"
+              imputation:
+                mean:
+                    type: 'zero_noflag'
+                sum:
+                    type: 'zero_noflag'
+              metrics:
+                  - 'avg'
+                  - 'sum'
+
+
+        categoricals_imputation:
+            all:
+              type: 'mean'
+
+        categoricals:
+            - # type of disciplinary infraction
+                column: disciplinary_infraction_code
+                choice_query: 'select distinct disciplinary_infraction_code from cleaned.infractions'
+                metrics:
+                    - 'sum'
+                    - 'avg'
+                    - 'max'
+
+        intervals: ['1y', '3y', 'all']
+
+        groups:
+          - 'entity_id'
+          - 'sentence_id'
+
+
+feature_group_strategies: ['all']
 
 feature_group_definition:
    prefix:
      - 'nc_recidivism'
 
-
 grid_config:
+  'sklearn.tree.DecisionTreeClassifier':
+    max_depth: [5]
+    max_features: ['sqrt']
+    min_samples_split: [2]
+    criterion: ['gini']
   'triage.component.catwalk.estimators.classifiers.ScaledLogisticRegression':
      penalty: ['l1', 'l2']
      C: [0.00001, 0.001,  0.1]
