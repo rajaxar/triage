@@ -1,4 +1,4 @@
-config_version: 'v6'
+config_version: 'v7'
 
 model_comment: 'nc_recidivism: initial_test'
 
@@ -32,6 +32,7 @@ model_group_keys:
   # - 'purpose'
   # - 'etl_date'
   
+random_seed: 1007
  
 # TIME SPLITTING
 # The time window to look at, and how to divide the window into
@@ -62,20 +63,9 @@ temporal_config:
 # This will be included in the metadata for each matrix and used to group models
 # If you don't pass one, the string 'default' will be used.
 #
-cohort_config:
+cohort_config: # released in last 3 years
     query: |
-        with sentence_info as (select distinct on (inmate_doc_number) *
-        from cleaned.sentences 
-        where sentence_start < '{as_of_date}'::date
-        order by inmate_doc_number, sentence_start desc),
-        all_in as (select distinct inmate_doc_number from cleaned.sentences),
-        numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)  
-
-        -- but released in last 3 years
-        select inmate_num::int as entity_id
-        from sentence_info s left join numbered_entities n
-        on s.inmate_doc_number = n.inmate_doc_number
-        where sentence_end <@ daterange(('{as_of_date}'::date - interval '3year')::date, '{as_of_date}'::date);
+        with sentence_info as (select distinct on (inmate_doc_number) * from cleaned.sentences where sentence_start < '{as_of_date}'::date order by inmate_doc_number, sentence_start desc), all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) select inmate_num::int as entity_id from sentence_info s left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number where sentence_end <@ daterange(('{as_of_date}'::date - interval '3year')::date, '{as_of_date}'::date);
 
     name: 'recently_released'
 
@@ -97,53 +87,19 @@ cohort_config:
 # under the 'label_name' key. The default label_name is 'outcome'.
 label_config:
     query: |
-      select inmate_doc_number as entity_id, 1 as outcome 
-      from cleaned.sentences
-      where sentence_start::date <@ daterange('{as_of_date}'::date, ('{as_of_date}'::date + interval '3year')::date) -- if they have a new start date after the beginning of the period, they recidivated (as only those inmates recently released are part of the cohort)
-      group by entity_id;
+      select inmate_doc_number as entity_id, 1 as outcome from cleaned.sentences where sentence_start::date <@ daterange('{as_of_date}'::date, ('{as_of_date}'::date + interval '3year')::date) -- if they have a new start date after the beginning of the period, they recidivated (as only those inmates recently released are part of the cohort) group by entity_id;
+    
     name: 'recidivated'
+    
     include_missing_labels_in_train_as: False
 
 
 feature_aggregations:
 
-    # -
-    #     prefix: 'sentences'
-    #     from_obj: |
-    #       with all_in as (select distinct inmate_doc_number from cleaned.sentences),
-    #       numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
-    #       (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, s.sentence_start, 
-    #       s.sentence_end, s.inmate_race_code, s.inmate_gender_code, inmate_birth_date, extract(year from s.inmate_birth_date) as birth_year, 
-    #       case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
-    #       s.sentence_total_counts, s.new_period_of_incarceration_fl, s.new_period_of_supervision_flag, s.p_p_commitment_status_flag, 
-    #       s.minimum_sentence_length, s.maximum_sentence_length, s.parole_supervision_begin_date, s.parole_discharge_date, s.length_of_supervision
-    #       from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number;) as inmate_sentences
-
-    #     knowledge_date_column: 'sentence_end'  
-
-    #     aggregates_imputation:
-    #         all:
-    #           type: 'mean'
-
-        
-    #     intervals: ['1y', '3y', 'all']
-
-
-    #     groups:
-    #       - 'entity_id'
-
-
      -
         prefix: 'demographics'
         from_obj: |
-          with all_in as (select distinct inmate_doc_number from cleaned.sentences),
-          numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
-          (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, 
-          sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, 
-          case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
-          sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, 
-          minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision
-          from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
+          with all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age, sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
         
         knowledge_date_column: 'sentence_end' # confirm with kit: should this be sentence start, as that is when we know someone has recidivated?
 
@@ -184,76 +140,11 @@ feature_aggregations:
             - 'entity_id'
 
 
-    # -
-    #     prefix: 'age'
-    #     from_obj: |
-    #       with all_in as (select distinct inmate_doc_number from cleaned.sentences),
-    #       numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
-    #       (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, 
-    #       sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, 
-    #       case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
-    #       sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, 
-    #       minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision
-    #       from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
-    #     knowledge_date_column: 'event_date'
-
-    #     categoricals_imputation:
-    #         all:
-    #           type: 'mean'
-
-    #     categoricals:
-    #         -
-    #             column: release_age
-    #             metrics:
-    #                 - 'avg'
-    #                 - 'sum'
-
-    #     intervals: ['1y', '5y', 'all']
-
-
-    #     groups:
-    #         - 'entity_id'
-
-
-     # -
-     #    prefix: 'race'
-     #    from_obj: |
-     #      with all_in as (select distinct inmate_doc_number from cleaned.sentences),
-     #      numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
-     #      (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, 
-     #      sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, 
-     #      case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
-     #      sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, 
-     #      minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision
-     #      from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
-
-     #    knowledge_date_column: 'sentence_end'
-
-     #    categoricals_imputation:
-     #        all:
-     #          type: 'zero'
-              
-     #    categoricals:
-            
-
-     #    intervals: ['1y', '3y', all']
-
-
-     #    groups:
-     #        - 'entity_id'
-
+    
      -
         prefix: 'sentences'
         from_obj: |
-          with all_in as (select distinct inmate_doc_number from cleaned.sentences),
-          numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
-          (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, 
-          sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, 
-          case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age,
-          sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, 
-          minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision
-          from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
-
+          with all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age, sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
 
         knowledge_date_column: 'sentence_end'
 
@@ -309,13 +200,7 @@ feature_aggregations:
      - 
         prefix: 'offenses'
         from_obj: |
-           with all_in as (select distinct inmate_doc_number from cleaned.sentences),
-           numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
-           (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, sentence_start, 
-           sentence_end, o.primary_felony_misdemeanor_cd, o.serving_min_or_max_term_code, o.primary_offense_code, o.county_of_conviction_code, o.court_type_code, o.offense_qualifier_code, o.sentencing_penalty_class_code, o.prior_record_level_code
-           from cleaned.sentences s 
-           left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number
-           left join cleaned.offenses o on s.entity_id = o.entity_id) as inmate_offenses
+           with all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, sentence_start, sentence_end, o.primary_felony_misdemeanor_cd, o.serving_min_or_max_term_code, o.primary_offense_code, o.county_of_conviction_code, o.court_type_code, o.offense_qualifier_code, o.sentencing_penalty_class_code, o.prior_record_level_code from cleaned.sentences s left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number left join cleaned.offenses o on s.entity_id = o.entity_id) as inmate_offenses
 
         knowledge_date_column: 'sentence_end'
 
@@ -399,13 +284,7 @@ feature_aggregations:
      - 
         prefix: 'infractions'
         from_obj: |
-           with all_in as (select distinct inmate_doc_number from cleaned.sentences),
-           numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in)
-           (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, sentence_start, 
-           sentence_end, disciplinary_infraction_code, disci_segregation_time_days, inmate_plea_re_infraction, disciinfraction_verdict_code
-           from cleaned.sentences s 
-           left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number
-           left join cleaned.infractions i on s.entity_id = i.entity_id) as inmate_infractions
+           with all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, sentence_start, sentence_end, disciplinary_infraction_code, disci_segregation_time_days, inmate_plea_re_infraction, disciinfraction_verdict_code from cleaned.sentences s left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number left join cleaned.infractions i on s.entity_id = i.entity_id) as inmate_infractions
 
         knowledge_date_column: 'sentence_end'
 
