@@ -240,7 +240,7 @@ feature_aggregations:
 
             - # days since last release (NOTE: all entities in cohort should have at least one prior release; adapted from joco small_master_config)
                 quantity:
-                    days_since_release: ('{collate_date}'::date - sentence_start::date)
+                    days_since_release: ('{collate_date}'::date - sentence_end::date)
                 imputation:
                     all:
                         type: 'error'
@@ -300,6 +300,7 @@ feature_aggregations:
                 metrics:
                     - 'avg'
                     - 'sum'
+
             - # number of different offenses 
                 quantity:
                     # num_offenses: DISTINCT replace(primary_offense_code, "'", "") 
@@ -315,24 +316,6 @@ feature_aggregations:
             - # offense location (101 unique counties --> 101)
                 column: county_of_conviction_code
                 choice_query: 'select distinct county_of_conviction_code from cleaned.offenses'
-                metrics:
-                    # - 'sum'
-                    # - 'avg'
-                    - 'max'
-
-            - # type of offense (1006 unique offenses)
-                column: pr_offense
-                # choice_query: "select distinct replace(primary_offense_code, '''', '') from cleaned.offenses"
-                choice_query: |
-                    with offense_cts as (
-                    select distinct replace(replace(replace(replace(primary_offense_code, '''', ''),' ','_'),'/','_'),'$','') as primary_offense_code, 
-                    count(*) as num_occurences 
-                    from cleaned.offenses
-                    group by primary_offense_code
-                    )
-                    select distinct primary_offense_code
-                    from offense_cts
-                    where num_occurences >= 2000;
                 metrics:
                     # - 'sum'
                     # - 'avg'
@@ -361,9 +344,66 @@ feature_aggregations:
             - 'sentence_id'
 
     - 
+        prefix: 'off_det'
+        from_obj: |
+           (with all_in as (select distinct inmate_doc_number from cleaned.sentences), 
+           numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+           from all_in) 
+           (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, 
+           s.inmate_commitment_prefix, s.sentence_start, s.sentence_end, o.primary_felony_misdemeanor_cd, 
+           o.serving_min_or_max_term_code, 
+           replace(replace(replace(replace(o.primary_offense_code, '''', ''),' ','_'),'/','_'),'$','') as pr_offense, 
+           o.county_of_conviction_code, o.court_type_code, o.offense_qualifier_code, o.sentencing_penalty_class_code, 
+           o.prior_record_level_code from cleaned.sentences s left join numbered_entities n 
+           on s.inmate_doc_number = n.inmate_doc_number 
+           left join cleaned.offenses o 
+           on s.entity_id = o.entity_id)) as inmate_offenses
+
+        knowledge_date_column: 'sentence_start'
+
+        categoricals_imputation:
+            all:
+                type: 'mean'
+
+        categoricals:
+            
+            - # type of offense (1006 unique offenses)
+                column: pr_offense
+                # choice_query: "select distinct replace(primary_offense_code, '''', '') from cleaned.offenses"
+                choice_query: |
+                    with offense_cts as (
+                    select distinct replace(replace(replace(replace(primary_offense_code, '''', ''),' ','_'),'/','_'),'$','') as primary_offense_code, 
+                    count(*) as num_occurences 
+                    from cleaned.offenses
+                    group by primary_offense_code
+                    )
+                    select distinct primary_offense_code
+                    from offense_cts
+                    where num_occurences >= 1500;
+                metrics:
+                    # - 'sum'
+                    # - 'avg'
+                    - 'max'
+        
+        intervals: ['1y', '3y', 'all']
+
+        groups:
+            - 'entity_id'
+            - 'sentence_id'
+
+    - 
         prefix: 'infractions'
         from_obj: |
-            (with all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, s.sentence_start, s.sentence_end, disciplinary_infraction_code, disci_segregation_time_days, inmate_plea_re_infraction, disciinfraction_verdict_code from cleaned.sentences s left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number left join cleaned.infractions i on s.entity_id = i.entity_id)) as inmate_infractions
+            (with all_in as (select distinct inmate_doc_number from cleaned.sentences), 
+            numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+            from all_in) 
+            (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, 
+            s.inmate_commitment_prefix, s.sentence_start, s.sentence_end, 
+            replace(replace(replace(left(disciplinary_infraction_code, 33-5), '''', ''),' ','_'),'/','_') as inf,
+            disci_segregation_time_days, inmate_plea_re_infraction, disciinfraction_verdict_code 
+            from cleaned.sentences s 
+            left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number 
+            left join cleaned.infractions i on s.entity_id = i.entity_id)) as inmate_infractions
 
         knowledge_date_column: 'sentence_start'
 
@@ -372,17 +412,9 @@ feature_aggregations:
               type: 'mean'
 
         aggregates:
-
-            - # number of infractions
-                quantity:
-                    total: "*"
-                metrics:
-                    - 'count'
-                    - 'max'
-
             - # number of different infractions 
                 quantity:
-                    num_infractions: DISTINCT replace(disciplinary_infraction_code, '''', '')
+                    num_infractions: DISTINCT inf
                     # num_infractions: DISTINCT disciplinary_infraction_code
                 metrics:
                     - count
@@ -413,15 +445,36 @@ feature_aggregations:
                     - 'max'
                     - 'sum'
 
+        intervals: ['1y', '3y', 'all']
+
+        groups:
+            - 'entity_id'
+            - 'sentence_id'
+
+    - 
+        prefix: 'inf_det'
+        from_obj: |
+            (with all_in as (select distinct inmate_doc_number from cleaned.sentences), 
+            numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+            from all_in) 
+            (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, 
+            s.inmate_commitment_prefix, s.sentence_start, s.sentence_end, 
+            replace(replace(replace(left(disciplinary_infraction_code, 33-5), '''', ''),' ','_'),'/','_') as inf,
+            disci_segregation_time_days, inmate_plea_re_infraction, disciinfraction_verdict_code 
+            from cleaned.sentences s 
+            left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number 
+            left join cleaned.infractions i on s.entity_id = i.entity_id)) as inmate_infractions
+
+        knowledge_date_column: 'sentence_start'
 
         categoricals_imputation:
             all:
                 type: 'mean'
-
+                
         categoricals:
-            - # type of disciplinary infraction (87 types)
-                column: disciplinary_infraction_code
-                choice_query: "select distinct replace(disciplinary_infraction_code, '''', '') from cleaned.infractions"
+            - # type of disciplinary infraction (78 types)
+                column: inf
+                choice_query: "select distinct replace(replace(replace(left(disciplinary_infraction_code, 33-5), '''', ''),' ','_'),'/','_') from cleaned.infractions"
                 metrics:
                     - 'sum'
                     - 'avg'
