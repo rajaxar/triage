@@ -95,17 +95,17 @@ if __name__ == '__main__':
         )
 
     parser.add_argument(
-        "-r",
-        "--replace",
-        help="If this flag is set, triage will overwrite existing models, matrices, and results",
-        action="store_true"
+            "-r",
+            "--replace",
+            help="If this flag is set, triage will overwrite existing models, matrices, and results",
+            action="store_true"
         )
 
     parser.add_argument(
-        "-p",
-        "--predictions",
-        help="If this flag is set, triage will write predictions to the database",
-        action="store_true"
+            "-p",
+            "--predictions",
+            help="If this flag is set, triage will write predictions to the database",
+            action="store_true"
         )
 
 
@@ -117,6 +117,5 @@ if __name__ == '__main__':
     except Exception as e:
         exit("run-triage error: Please review arguments passed: {}".format(e))
 
-    db_connect(db_profile)
     run(config_filename=a.config_filename, db_profile=a.db_profile,
         replace=a.replace, predictions=a.predictions)
