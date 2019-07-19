@@ -28,18 +28,19 @@ from sqlalchemy.pool import Pool
 
 def db_connect(db_profile):
     # with open('triage_configs/db_default_profile.json') as f:
-    with open(db_profile) as f:
+    with open(db_profile, 'r') as f:
         DB_CONFIG = json.load(f)
     return DB_CONFIG
 
 
-def load_features()
-    with open('triage_configs/nc_recid_sep_tables.yaml', 'r') as f:
+def load_features(config_filename):
+    # with open('triage_configs/nc_recid_sep_tables.yaml', 'r') as f:
+    with open(config_filename, 'r') as f:
         feature_configs = yaml.load(f, Loader=yaml.SafeLoader)
     return feature_configs
 
 
-def run(config_filename, replace=True, predictions=True):
+def run(config_filename, db_profile, replace=True, predictions=True):
     # load main experiment config
 
     with open(config_filename, 'r') as f:
@@ -49,6 +50,7 @@ def run(config_filename, replace=True, predictions=True):
     logger.info('**********************NEW MODELING RUN**********************')
     logger.debug(config)
 
+    DB_CONFIG = db_connect(db_profile)
     # Lookup the latest match timestamp and insert into the user metadata
     db_engine = create_engine(
         f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['pass']}@{DB_CONFIG['host']}/{DB_CONFIG['db']}"
@@ -86,6 +88,13 @@ if __name__ == '__main__':
         )
 
     parser.add_argument(
+            "-d",
+            "--db_profile",
+            type=str,
+            help="Pass the database configuration filename"
+        )
+
+    parser.add_argument(
         "-r",
         "--replace",
         help="If this flag is set, triage will overwrite existing models, matrices, and results",
@@ -108,4 +117,6 @@ if __name__ == '__main__':
     except Exception as e:
         exit("run-triage error: Please review arguments passed: {}".format(e))
 
-    run(a.config_filename, a.replace, a.predictions)
+    db_connect(db_profile)
+    run(config_filename=a.config_filename, db_profile=a.db_profile,
+        replace=a.replace, predictions=a.predictions)
