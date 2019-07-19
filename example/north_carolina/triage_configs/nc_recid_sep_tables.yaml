@@ -129,6 +129,7 @@ feature_aggregations:
         prefix: 'demographics'
         
         from_obj: |
+
             (with all_in as (select distinct inmate_doc_number 
             from cleaned.sentences), 
             numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
@@ -165,7 +166,6 @@ feature_aggregations:
         categoricals_imputation:
             all:
                 type: 'null_category'
-
 
         categoricals:
             - # gender 
@@ -213,7 +213,6 @@ feature_aggregations:
             from cleaned.sentences s join numbered_entities n 
             on s.inmate_doc_number = n.inmate_doc_number
             where s.sentence_start is not null and s.sentence_end is not null)) as inmate_sentences
-
 
         knowledge_date_column: 'sentence_start'
 
@@ -362,7 +361,7 @@ feature_aggregations:
                         then county_of_conviction_code
                         else 'OTHER' end as county
                     from cleaned.offenses
-
+                type: 'mean'
                 metrics:
                     # - 'sum'
                     # - 'avg'
@@ -386,7 +385,6 @@ feature_aggregations:
     
             - # type of offense (1006 unique offenses)
                 column: pr_off
-                # choice_query: "select distinct replace(primary_offense_code, '''', '') from cleaned.offenses"
                 choice_query: |
                     with offense_cts as (select distinct replace(replace(replace(left(primary_offense_code, 30-5), '''', ''),' ','_'),'/','_') as offense_code, count(*) as num_occurences 
                     from cleaned.offenses
@@ -466,7 +464,6 @@ feature_aggregations:
             - # number of different infractions 
                 quantity:
                     num_infractions: DISTINCT infr
-                    # num_infractions: DISTINCT disciplinary_infraction_code
                 metrics:
                     - count
 
@@ -560,7 +557,6 @@ feature_aggregations:
     #     groups:
     #         - 'entity_id'
     #         - 'sentence_id'
-
 
 feature_group_strategies: ['all']
 
