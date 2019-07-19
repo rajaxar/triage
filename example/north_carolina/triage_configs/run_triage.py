@@ -68,8 +68,8 @@ def run(config_filename, db_profile, replace=True, predictions=True):
         save_predictions=predictions,
     )
 
-        experiment.validate()
-        experiment.run()
+    experiment.validate()
+    experiment.run()
 
 # nc_experiment = run(config_filename = 'triage_configs/nc_recid_sep_tables.yaml')
 
