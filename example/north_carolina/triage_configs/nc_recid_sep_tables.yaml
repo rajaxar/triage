@@ -33,25 +33,24 @@ model_group_keys:
   # - 'etl_date'
   
 random_seed: 1007
- 
+
 # TIME SPLITTING
 # The time window to look at, and how to divide the window into
 # train/test splits
 temporal_config:
     # feature_start_time: '1975-01-01' # earliest date included in features
-    feature_start_time: '2016-01-01' # earliest date included in features
+    feature_start_time: '2015-01-01' # earliest date included in features
     feature_end_time: '2019-04-15'   # latest date included in features
     # label_start_time: '1975-01-02' # earliest date for which labels are avialable
     label_start_time: '2016-01-02' # earliest date for which labels are avialable
     label_end_time: '2019-04-16' # day AFTER last label date (all dates in any model are < this date)
     model_update_frequency: '1y' # how frequently to retrain models
-    training_as_of_date_frequencies: '1y' # time between as of dates for same entity in train matrix
-    test_as_of_date_frequencies: '1y' # time between as of dates for same entity in test matrix
+    training_as_of_date_frequencies: ['1y'] # time between as of dates for same entity in train matrix
+    test_as_of_date_frequencies: ['1y'] # time between as of dates for same entity in test matrix
     max_training_histories: ['6y'] # length of time included in a train matrix
-    test_durations: ['7day'] # length of time included in a test matrix (0 days will give a single prediction immediately after training end)
+    test_durations: ['0d'] # length of time included in a test matrix (0 days will give a single prediction immediately after training end)
     training_label_timespans: ['1y'] # time period across which outcomes are labeled in train matrices
     test_label_timespans: ['1y'] # time period across which outcomes are labeled in test matrices
-
 
 # COHORT CONFIG
 # Cohorts are configured by passing a query with placeholders for the 'as_of_date'.
@@ -63,9 +62,29 @@ temporal_config:
 # This will be included in the metadata for each matrix and used to group models
 # If you don't pass one, the string 'default' will be used.
 #
-cohort_config: # released in last 3 years
+cohort_config: # previoussly incarcerated + released within the 3 years prior to as_of_date
     query: |
-        with sentence_info as (select distinct on (inmate_doc_number) * from cleaned.sentences where sentence_start < '{as_of_date}'::date order by inmate_doc_number, sentence_start desc), all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) select inmate_num::int as entity_id from sentence_info s left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number where sentence_end <@ daterange(('{as_of_date}'::date - interval '3year')::date, '{as_of_date}'::date);
+        (with all_in as (
+        select distinct inmate_doc_number
+        from cleaned.sentences
+        ), 
+        numbered_entities as (
+        select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+        from all_in
+        ),
+        sentence_info as (
+        select distinct on (inmate_doc_number) * 
+        from cleaned.sentences 
+        --previously incarceratd at least once
+        where sentence_start < '{as_of_date}'::date
+        order by inmate_doc_number, sentence_start desc
+        )
+        select inmate_num::int as entity_id 
+        from sentence_info s 
+        left join numbered_entities n 
+        on s.inmate_doc_number = n.inmate_doc_number 
+        --- also had a release in previous 3 years
+        where sentence_end <@ daterange(('{as_of_date}'::date - interval '3year')::date, '{as_of_date}'::date))
 
     name: 'recently_released'
 
@@ -87,39 +106,73 @@ cohort_config: # released in last 3 years
 # under the 'label_name' key. The default label_name is 'outcome'.
 label_config:
     query: |
-      select inmate_doc_number as entity_id, 1 as outcome from cleaned.sentences where sentence_start::date <@ daterange('{as_of_date}'::date, ('{as_of_date}'::date + interval '3year')::date) -- if they have a new start date after the beginning of the period, they recidivated (as only those inmates recently released are part of the cohort) group by entity_id;
+        with all_in as (select distinct inmate_doc_number 
+        from cleaned.sentences), 
+        numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+        from all_in) 
+        select inmate_num::int as entity_id, 
+        s.inmate_doc_number, s.inmate_commitment_prefix, s.sentence_start, s.sentence_end, 
+        1 as outcome
+        from cleaned.sentences s 
+        left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number
+        -- if they have a new start date after the as_of_date, they recidivated (as only those inmates recently released are part of the cohort)
+        where sentence_start::date <@ daterange('{as_of_date}'::date, ('{as_of_date}'::date + interval '{label_timespan}')::date)
     
     name: 'recidivated'
-    
+
+    # if no new start date they did not recidivate --> label should be False
     include_missing_labels_in_train_as: False
 
 
 feature_aggregations:
-
-     -
+    -
         prefix: 'demographics'
-        from_obj: |
-          with all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age, sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
         
-        knowledge_date_column: 'sentence_end' # confirm with kit: should this be sentence start, as that is when we know someone has recidivated?
+        from_obj: |
+            (with all_in as (select distinct inmate_doc_number 
+            from cleaned.sentences), 
+            numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+            from all_in) 
+            (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, 
+            s.inmate_doc_number, inmate_commitment_prefix, sentence_start, sentence_end, 
+            inmate_race_code, inmate_gender_code, s.inmate_birth_date, extract(year from s.inmate_birth_date) as birth_year, 
+            case when sentence_end - s.inmate_birth_date > 0 then floor(round(sentence_end - s.inmate_birth_date)/ 365)::int else null end as release_age, 
+            sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, 
+            minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, 
+            length_of_supervision 
+            from cleaned.sentences s join numbered_entities n 
+            on s.inmate_doc_number = n.inmate_doc_number)) as inmate_sentences
+        
+        knowledge_date_column: 'sentence_start' # confirm with kit: should this be sentence start, as that is when we know someone has recidivated?
 
         aggregates_imputation:
             all:
-              type: 'mean'
+                type: 'mean'
 
         aggregates:
-          - # age in years
-            quantity:
-              age: extract(year from release_age('{collate_date}'::date, inmate_birth_date::date))
-            metrics: ['max']
+            - # age at first and last sentence
+                quantity: release_age
+                metrics: 
+                    - 'max'
+                    - 'min'
 
+            - # age in years
+                quantity:
+                    age: extract(year from age('{collate_date}'::date, inmate_birth_date::date))
+                metrics:
+                    - 'max'
+              
         categoricals_imputation:
             all:
-              type: 'zero'
-              
+                type: 'null_category'
+
+
         categoricals:
             - # gender 
                 column: inmate_gender_code
+                imputation:
+                    all:
+                        type: 'null_category'
                 choices: ['MALE', 'FEMALE']
                 metrics:
                     - 'sum'
@@ -128,67 +181,83 @@ feature_aggregations:
 
             - # race 
                 column: inmate_race_code
+                imputation:
+                    all:
+                        type: 'zero'
                 choice_query: 'select distinct inmate_race_code from cleaned.sentences'
                 metrics:
                     - 'sum'
                     - 'avg'
                     - 'max'
-        intervals: ['1y', '3y', all']
+        intervals: ['1y', '3y', 'all']
 
 
         groups:
             - 'entity_id'
-
-
     
-     -
+    -
         prefix: 'sentences'
+        
         from_obj: |
-          with all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, inmate_commitment_prefix, sentence_start, sentence_end, inmate_race_code, inmate_gender_code, extract(year from s.inmate_birth_date) as birth_year, case when sentence_end - inmate_birth_date > 0 then floor(round(sentence_end - inmate_birth_date)/ 365)::int else null end as release_age, sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, length_of_supervision from cleaned.sentences s join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number) as inmate_sentences
+            (with all_in as (select distinct inmate_doc_number 
+            from cleaned.sentences), 
+            numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+            from all_in) 
+            (select n.inmate_num::int as entity_id, s.entity_id as sentence_id, 
+            s.inmate_doc_number, inmate_commitment_prefix, sentence_start, sentence_end, 
+            inmate_race_code, inmate_gender_code, s.inmate_birth_date, extract(year from s.inmate_birth_date) as birth_year, 
+            case when sentence_end - s.inmate_birth_date > 0 then floor(round(sentence_end - s.inmate_birth_date)/ 365)::int else null end as release_age, 
+            sentence_total_counts, new_period_of_incarceration_fl, new_period_of_supervision_flag, p_p_commitment_status_flag, 
+            minimum_sentence_length, maximum_sentence_length, parole_supervision_begin_date, parole_discharge_date, 
+            length_of_supervision 
+            from cleaned.sentences s join numbered_entities n 
+            on s.inmate_doc_number = n.inmate_doc_number
+            where s.sentence_start is not null and s.sentence_end is not null)) as inmate_sentences
 
-        knowledge_date_column: 'sentence_end'
+
+        knowledge_date_column: 'sentence_start'
 
         aggregates_imputation:
             all:
-              type: 'mean'
+                type: 'mean'
 
         aggregates:
-          aggregates:
-          - # number of sentences
-            quantity:
-              total: "*"
-            metrics:
-              - 'count'
+            - # number of sentences
+                quantity:
+                    total: "*"
+                metrics:
+                    - 'count'
 
-          - # new_supervision
-              quantity:
-                new_supervision_bool: "case when new_period_of_supervision_flag = 'Y' then 1 else 0 end"
-              metrics:
-                  - 'avg'
-                  - 'sum'
+            - # new_supervision
+                quantity:
+                    new_supervision_bool: "case when new_period_of_supervision_flag = 'Y' then 1 else 0 end"
+                metrics:
+                    - 'avg'
+                    - 'sum'
 
-          - # new_incarceration
-              quantity:
-                new_incarceration_bool: "case when new_period_of_incarceration_fl = 'Y' then 1 else 0 end"
-              metrics:
-                  - 'avg'
-                  - 'sum'
+            - # new_incarceration
+                quantity:
+                    new_incarceration_bool: "case when new_period_of_incarceration_fl = 'Y' then 1 else 0 end"
+                metrics:
+                    - 'avg'
+                    - 'sum'
 
-          - # parole_following
-              quantity:
-                parole_bool: "case when parole_supervision_begin_date is null then 0 else 1 end"
-              metrics:
-                  - 'avg'
-                  - 'sum'
+            - # parole_following
+                quantity:
+                    parole_bool: "case when parole_supervision_begin_date is null then 0 else 1 end"
+                metrics:
+                    - 'avg'
+                    - 'sum'
 
-          - # days since last release (NOTE: all entities in cohort should have at least one prior release; adapted from joco small_master_config)
-              quantity:
-                days_since_release: ('{collate_date}'::date - sentence_start::date)
-              metrics:
-                - min
-              imputation:
-                  all:
-                    type: 'error'
+            - # days since last release (NOTE: all entities in cohort should have at least one prior release; adapted from joco small_master_config)
+                quantity:
+                    days_since_release: ('{collate_date}'::date - sentence_end::date)
+                imputation:
+                    all:
+                        type: 'mean'
+                metrics:
+                    - min
+
 
         intervals: ['1y', '3y', 'all']
 
@@ -196,80 +265,139 @@ feature_aggregations:
         groups:
             - 'entity_id'
 
-
-     - 
+    - 
         prefix: 'offenses'
         from_obj: |
-           with all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, sentence_start, sentence_end, o.primary_felony_misdemeanor_cd, o.serving_min_or_max_term_code, o.primary_offense_code, o.county_of_conviction_code, o.court_type_code, o.offense_qualifier_code, o.sentencing_penalty_class_code, o.prior_record_level_code from cleaned.sentences s left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number left join cleaned.offenses o on s.entity_id = o.entity_id) as inmate_offenses
+            (with all_in as (select distinct inmate_doc_number from cleaned.sentences), 
+            numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+            from all_in),
+            offense_cts as (
+            select distinct replace(replace(replace(primary_offense_code, '''', ''),' ','_'),'/','_') as offense_code, count(*) as num_occurences 
+            from cleaned.offenses
+            group by offense_code
+            order by count(*) DESC
+            limit 30
+            ),
+            counties as (
+            select distinct county_of_conviction_code, count(*) as num_occurences 
+            from cleaned.offenses
+            group by county_of_conviction_code
+            order by count(*) DESC
+            limit 30
+            )
+            (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, 
+            s.inmate_commitment_prefix, s.sentence_start, s.sentence_end, o.primary_felony_misdemeanor_cd, 
+            o.serving_min_or_max_term_code, 
+            case when replace(replace(replace(replace(left(o.primary_offense_code, 30-5), '''', ''),' ','_'),'/','_'),'$','') in (select offense_code from offense_cts)
+                then replace(replace(replace(replace(left(o.primary_offense_code, 30-5), '''', ''),' ','_'),'/','_'),'$','')
+                else 'OTHER' end as pr_off,
+            case when o.county_of_conviction_code in (select county_of_conviction_code from counties)
+                then o.county_of_conviction_code
+                else 'OTHER' end as county,
+            o.court_type_code, o.offense_qualifier_code, o.sentencing_penalty_class_code, 
+            o.prior_record_level_code from cleaned.sentences s left join numbered_entities n 
+            on s.inmate_doc_number = n.inmate_doc_number 
+            left join cleaned.offenses o 
+            on s.entity_id = o.entity_id)) as inmate_offenses
 
-        knowledge_date_column: 'sentence_end'
+        knowledge_date_column: 'sentence_start'
 
         aggregates_imputation:
             all:
               type: 'mean'
 
         aggregates:
-          - # felony_offense
-              quantity:
-                felony_bool: "case when primary_felony_misdemeanor_cd = 'FELON' then 1 else 0 end"
-              imputation:
-                mean:
-                    type: 'zero_noflag'
-                sum:
-                    type: 'zero_noflag'
-              metrics:
-                  - 'avg'
-                  - 'sum'
+            - # felony_offense
+                quantity:
+                    felony_bool: "case when primary_felony_misdemeanor_cd = 'FELON' then 1 else 0 end"
+                imputation:
+                    mean:
+                        type: 'zero_noflag'
+                    sum:
+                        type: 'zero_noflag'
+                metrics:
+                    - 'avg'
+                    - 'sum'
 
-          - # max_term
-              quantity:
-                max_term_bool: "case when serving_min_or_max_term_code = 'MAX.TERM:' then 1 else 0 end"
-              imputation:
-                mean:
-                    type: 'zero_noflag'
-                sum:
-                    type: 'zero_noflag'
-              metrics:
-                  - 'avg'
-                  - 'sum'
-          - # number of different offenses 
-            quantity:
-              num_cities: DISTINCT primary_offense_code
-            metrics:
-                - count
+            - # max_term
+                quantity:
+                    max_term_bool: "case when serving_min_or_max_term_code = 'MAX.TERM:' then 1 else 0 end"
+                imputation:
+                    mean:
+                        type: 'zero_noflag'
+                    sum:
+                        type: 'zero_noflag'
+                metrics:
+                    - 'avg'
+                    - 'sum'
+
+            - # number of different offenses 
+                quantity:
+                    num_offenses: DISTINCT pr_off
+                metrics:
+                    - count
+
+            - # number of different counties 
+                quantity:
+                    num_counties: DISTINCT county
+                metrics:
+                    - count
 
         categoricals_imputation:
             all:
-              type: 'mean'
+                type: 'zero'
 
         categoricals:
-            - # offense location
-                column: county_of_conviction_code
-                choice_query: 'select distinct county_of_conviction_code from cleaned.offenses'
+            - # offense location (101 unique counties --> 101)
+                column: county
+                choice_query: |
+                    with counties as (
+                    select distinct county_of_conviction_code, count(*) as num_occurences 
+                    from cleaned.offenses
+                    group by county_of_conviction_code
+                    order by count(*) DESC
+                    limit 30)
+                    select distinct
+                    case when county_of_conviction_code in (select county_of_conviction_code from counties)
+                        then county_of_conviction_code
+                        else 'OTHER' end as county
+                    from cleaned.offenses
+
                 metrics:
-                    - 'sum'
-                    - 'avg'
+                    # - 'sum'
+                    # - 'avg'
                     - 'max'
 
-            - # type of offense 
-                column: primary_offense_code
-                choice_query: 'select distinct primary_offense_code from cleaned.offenses'
-                metrics:
-                    - 'sum'
-                    - 'avg'
-                    - 'max'
-
-            - # offense qualifier
+            - # offense qualifier (11 codes --> 33 cols)
                 column: offense_qualifier_code
                 choice_query: 'select distinct offense_qualifier_code from cleaned.offenses'
                 metrics:
-                    - 'sum'
+                    # - 'sum'
                     - 'avg'
                     - 'max'
 
-            - # prior record level
+            - # prior record level (6 levels --> 18 cols)
                 column: prior_record_level_code
                 choice_query: 'select distinct prior_record_level_code from cleaned.offenses'
+                metrics:
+                    # - 'sum'
+                    - 'avg'
+                    - 'max'
+    
+            - # type of offense (1006 unique offenses)
+                column: pr_off
+                # choice_query: "select distinct replace(primary_offense_code, '''', '') from cleaned.offenses"
+                choice_query: |
+                    with offense_cts as (select distinct replace(replace(replace(left(primary_offense_code, 30-5), '''', ''),' ','_'),'/','_') as offense_code, count(*) as num_occurences 
+                    from cleaned.offenses
+                    group by offense_code
+                    order by count(*) DESC
+                    limit 30)
+                    select distinct
+                    case when replace(replace(replace(replace(left(primary_offense_code, 30-5), '''', ''),' ','_'),'/','_'),'$','') in (select offense_code from offense_cts)
+                    then replace(replace(replace(replace(left(primary_offense_code, 30-5), '''', ''),' ','_'),'/','_'),'$','')
+                    else 'OTHER' end as pr_off
+                    from cleaned.offenses
                 metrics:
                     - 'sum'
                     - 'avg'
@@ -278,70 +406,115 @@ feature_aggregations:
         intervals: ['1y', '3y', 'all']
 
         groups:
-          - 'entity_id'
-          - 'sentence_id'
+            - 'entity_id'
+            - 'sentence_id'
 
-     - 
+    # - 
+    #     prefix: 'off_det'
+    #     from_obj: |
+    #        (with all_in as (select distinct inmate_doc_number from cleaned.sentences), 
+    #        numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+    #        from all_in) 
+    #        (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, 
+    #        s.inmate_commitment_prefix, s.sentence_start, s.sentence_end, o.primary_felony_misdemeanor_cd, 
+    #        o.serving_min_or_max_term_code, 
+    #        replace(replace(replace(replace(o.primary_offense_code, '''', ''),' ','_'),'/','_'),'$','') as pr_offense, 
+    #        o.county_of_conviction_code, o.court_type_code, o.offense_qualifier_code, o.sentencing_penalty_class_code, 
+    #        o.prior_record_level_code from cleaned.sentences s left join numbered_entities n 
+    #        on s.inmate_doc_number = n.inmate_doc_number 
+    #        left join cleaned.offenses o 
+    #        on s.entity_id = o.entity_id)) as inmate_offenses
+
+    #     knowledge_date_column: 'sentence_start'
+        
+    #     intervals: ['1y', '3y', 'all']
+
+    #     groups:
+    #         - 'entity_id'
+    #         - 'sentence_id'
+
+    - 
         prefix: 'infractions'
         from_obj: |
-           with all_in as (select distinct inmate_doc_number from cleaned.sentences), numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num from all_in) (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, s.inmate_commitment_prefix, sentence_start, sentence_end, disciplinary_infraction_code, disci_segregation_time_days, inmate_plea_re_infraction, disciinfraction_verdict_code from cleaned.sentences s left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number left join cleaned.infractions i on s.entity_id = i.entity_id) as inmate_infractions
+            (with all_in as (select distinct inmate_doc_number from cleaned.sentences), 
+            numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+            from all_in),
+            inf_cts as (
+            select distinct replace(replace(replace(left(disciplinary_infraction_code,30-5), '''', ''),' ','_'),'/','_') as infraction_cd, count(*) as num_occurences 
+            from cleaned.infractions
+            group by infraction_cd
+            order by count(*) DESC
+            limit 30
+            )
+            (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, 
+            s.inmate_commitment_prefix, s.sentence_start, s.sentence_end, 
+            case when replace(replace(replace(replace(left(disciplinary_infraction_code,30-5), '''', ''),' ','_'),'/','_'),'$','') in (select infraction_cd from inf_cts)
+            then replace(replace(replace(replace(left(disciplinary_infraction_code,30-5), '''', ''),' ','_'),'/','_'),'$','')
+            else 'OTHER' end as infr,
+            disci_segregation_time_days, inmate_plea_re_infraction, disciinfraction_verdict_code 
+            from cleaned.sentences s 
+            left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number 
+            left join cleaned.infractions i on s.entity_id = i.entity_id)) as inmate_infractions
 
-        knowledge_date_column: 'sentence_end'
+        knowledge_date_column: 'sentence_start'
 
         aggregates_imputation:
             all:
               type: 'mean'
 
         aggregates:
+            - # number of different infractions 
+                quantity:
+                    num_infractions: DISTINCT infr
+                    # num_infractions: DISTINCT disciplinary_infraction_code
+                metrics:
+                    - count
 
-          - # number of infractions
-            quantity:
-              total: "*"
-            metrics:
-              - 'count'
-              - 'max'
+            - # pct infractions pleaded guilty, any infractions pleaded guilty, total infractions pleaded guilty
+                quantity:
+                    guilty_plea_bool: "case when inmate_plea_re_infraction = 'GUILTY' then 1 else 0 end"
+                imputation:
+                    mean:
+                        type: 'zero_noflag'
+                    sum:
+                        type: 'zero_noflag'
+                metrics:
+                    - 'avg'
+                    - 'max'
+                    - 'sum'
 
-          - # number of different infractions 
-            quantity:
-              num_cities: DISTINCT disciplinary_infraction_code
-            metrics:
-                - count
-
-          - # pct infractions pleaded guilty, any infractions pleaded guilty, total infractions pleaded guilty
-              quantity:
-                guilty_plea_bool: "case when inmate_plea_re_infraction = 'GUILTY' then 1 else 0 end"
-              imputation:
-                mean:
-                    type: 'zero_noflag'
-                sum:
-                    type: 'zero_noflag'
-              metrics:
-                  - 'avg'
-                  - 'max'
-                  - sum
-
-          - # pct infractions with guilty verdict, any infractions with guilty verdict, total infractions with guilty verdict
-              quantity:
-                guilty_verdict_bool: "case when disciinfraction_verdict_code = 'GUILTY' then 1 else 0 end"
-              imputation:
-                mean:
-                    type: 'zero_noflag'
-                sum:
-                    type: 'zero_noflag'
-              metrics:
-                  - 'avg'
-                  - 'max'
-                  - 'sum'
-
+            - # pct infractions with guilty verdict, any infractions with guilty verdict, total infractions with guilty verdict
+                quantity:
+                    guilty_verdict_bool: "case when disciinfraction_verdict_code = 'GUILTY' then 1 else 0 end"
+                imputation:
+                    mean:
+                        type: 'zero_noflag'
+                    sum:
+                        type: 'zero_noflag'
+                metrics:
+                    - 'avg'
+                    - 'max'
+                    - 'sum'
 
         categoricals_imputation:
             all:
-              type: 'mean'
+                type: 'zero'
 
         categoricals:
-            - # type of disciplinary infraction
-                column: disciplinary_infraction_code
-                choice_query: 'select distinct disciplinary_infraction_code from cleaned.infractions'
+    
+            - # type of infraction (78 unique types)
+                column: infr
+                choice_query: |
+                    with inf_cts as (select distinct replace(replace(replace(left(disciplinary_infraction_code,30-5), '''', ''),' ','_'),'/','_') as infraction_cd, count(*) as num_occurences 
+                    from cleaned.infractions
+                    group by infraction_cd
+                    order by count(*) DESC
+                    limit 30)
+                    select distinct
+                    case when replace(replace(replace(replace(left(disciplinary_infraction_code,30-5), '''', ''),' ','_'),'/','_'),'$','') in (select infraction_cd from inf_cts)
+                    then replace(replace(replace(replace(left(disciplinary_infraction_code,30-5), '''', ''),' ','_'),'/','_'),'$','')
+                    else 'OTHER' end as inf_cd
+                    from cleaned.infractions
                 metrics:
                     - 'sum'
                     - 'avg'
@@ -350,8 +523,43 @@ feature_aggregations:
         intervals: ['1y', '3y', 'all']
 
         groups:
-          - 'entity_id'
-          - 'sentence_id'
+            - 'entity_id'
+            - 'sentence_id'
+
+    # - 
+    #     prefix: 'inf_det'
+    #     from_obj: |
+    #         (with all_in as (select distinct inmate_doc_number from cleaned.sentences), 
+    #         numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num 
+    #         from all_in) 
+    #         (select distinct n.inmate_num::int as entity_id, s.entity_id as sentence_id, s.inmate_doc_number, 
+    #         s.inmate_commitment_prefix, s.sentence_start, s.sentence_end, 
+    #         replace(replace(replace(left(disciplinary_infraction_code, 33-5), '''', ''),' ','_'),'/','_') as inf,
+    #         disci_segregation_time_days, inmate_plea_re_infraction, disciinfraction_verdict_code 
+    #         from cleaned.sentences s 
+    #         left join numbered_entities n on s.inmate_doc_number = n.inmate_doc_number 
+    #         left join cleaned.infractions i on s.entity_id = i.entity_id)) as inmate_infractions
+
+    #     knowledge_date_column: 'sentence_start'
+
+    #     categoricals_imputation:
+    #         all:
+    #             type: 'mean'
+                
+    #     categoricals:
+    #         - # type of disciplinary infraction (78 types)
+    #             column: inf
+    #             choice_query: "select distinct replace(replace(replace(left(disciplinary_infraction_code, 33-5), '''', ''),' ','_'),'/','_') from cleaned.infractions"
+    #             metrics:
+    #                 - 'sum'
+    #                 - 'avg'
+    #                 - 'max'
+
+    #     intervals: ['1y', '3y', 'all']
+
+    #     groups:
+    #         - 'entity_id'
+    #         - 'sentence_id'
 
 
 feature_group_strategies: ['all']
@@ -371,21 +579,22 @@ grid_config:
      
 scoring:
     sort_seed: 5
+    
     testing_metric_groups:
         -
-          metrics: [precision@, recall@]
-          thresholds:
-            percentiles: [1.0, 5.0, 10.0, 20.0]
-            top_n: [100, 250, 500, 1000, 2500, 5000]
+            metrics: [precision@, recall@]
+            thresholds:
+                percentiles: [1.0, 5.0, 10.0, 20.0]
+                top_n: [100, 250, 500, 1000, 2500, 5000]
 
     training_metric_groups:
-      -
-        metrics: [accuracy]
-      -
-        metrics: [precision@, recall@]
-        thresholds:
-          percentiles: [1.0, 5.0, 10.0, 20.0]
-          top_n: [100, 250, 500, 1000, 2500, 5000]
+        -
+            metrics: [accuracy]
+        -
+            metrics: [precision@, recall@]
+            thresholds:
+                percentiles: [1.0, 5.0, 10.0, 20.0]
+                top_n: [100, 250, 500, 1000, 2500, 5000]
 
 
 # INDIVIDUAL IMPORTANCES
