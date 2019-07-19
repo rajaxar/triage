@@ -129,6 +129,7 @@ feature_aggregations:
         prefix: 'demographics'
 
         from_obj: |
+
             (with all_in as (select distinct inmate_doc_number
             from cleaned.sentences),
             numbered_entities as (select inmate_doc_number, ROW_NUMBER() over (order by inmate_doc_number) as inmate_num
@@ -165,7 +166,6 @@ feature_aggregations:
         categoricals_imputation:
             all:
                 type: 'null_category'
-
 
         categoricals:
             - # gender
@@ -362,7 +362,6 @@ feature_aggregations:
                         then county_of_conviction_code
                         else 'OTHER' end as county
                     from cleaned.offenses
-
                 metrics:
                     # - 'sum'
                     # - 'avg'
@@ -466,7 +465,6 @@ feature_aggregations:
             - # number of different infractions
                 quantity:
                     num_infractions: DISTINCT infr
-                    # num_infractions: DISTINCT disciplinary_infraction_code
                 metrics:
                     - count
 
@@ -560,7 +558,6 @@ feature_aggregations:
     #     groups:
     #         - 'entity_id'
     #         - 'sentence_id'
-
 
 feature_group_strategies: ['all']
 
