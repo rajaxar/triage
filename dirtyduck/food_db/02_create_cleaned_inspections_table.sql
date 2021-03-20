@@ -21,11 +21,10 @@ create table cleaned.inspections as (
         btrim(lower(regexp_replace(type, 'liquor', 'task force', 'gi')))
         from 'canvass|task force|complaint|food poisoning|consultation|license|tag removal') as type,
       date,
-        -- point(longitude, latitude) as location
-      ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography as location  -- We use geography so the measurements are in meters
+      point(longitude, latitude) as location
+      --ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography as location  -- We use geography so the measurements are in meters
       from raw.inspections
      where zip is not null  -- removing NULL zip codes
   )
-
   select * from cleaned where type is not null
 );

@@ -30,7 +30,6 @@ create table semantic.entities as (
             license_num, facility, facility_aka, facility_type, address,
             date asc -- IMPORTANT!!
             )
-
     select
         row_number() over (order by start_time asc ) as entity_id,
         license_num,
@@ -53,23 +52,21 @@ create index entities_facility_type_ix on semantic.entities (facility_type);
 create index entities_zip_code_ix on semantic.entities (zip_code);
 
 -- Spatial index
-create index entities_location_gix on semantic.entities using gist (location);
+-- create index entities_location_gix on semantic.entities using gist (location);
 
 create index entities_full_key_ix on semantic.entities (license_num, facility, facility_aka, facility_type, address);
 
 drop table if exists semantic.events cascade;
 
 create table semantic.events as (
-
         with entities as (
         select * from semantic.entities
             ),
-
         inspections as (
         select
             i.inspection, i.type, i.date, i.risk, i.result,
             i.license_num, i.facility, i.facility_aka,
-            i.facility_type, i.address, i.zip_code, i.location,
+            i.facility_type, i.address, i.zip_code,-- i.location,
             jsonb_agg(
                 jsonb_build_object(
                     'code', v.code,
@@ -86,14 +83,13 @@ create table semantic.events as (
             on i.inspection = v.inspection
         group by
             i.inspection, i.type, i.license_num, i.facility,
-            i.facility_aka, i.facility_type, i.address, i.zip_code, i.location,
+            i.facility_aka, i.facility_type, i.address, i.zip_code, --i.location,
             i.date, i.risk, i.result
             )
-
     select
         i.inspection as event_id,
         e.entity_id, i.type, i.date, i.risk, i.result,
-        e.facility_type, e.zip_code, e.location,
+        e.facility_type, e.zip_code, --e.location,
         i.violations
     from
         entities as e
@@ -111,7 +107,7 @@ create index events_facility_type_ix on semantic.events  (facility_type);
 create index events_zip_code_ix on semantic.events  (zip_code);
 
 -- Spatial index
-create index events_location_gix on semantic.events using gist (location);
+-- create index events_location_gix on semantic.events using gist (location);
 
 -- JSONB indices
 create index events_violations on semantic.events using gin(violations);
