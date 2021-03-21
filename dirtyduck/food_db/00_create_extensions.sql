@@ -1,10 +1,8 @@
-create extension postgis;
+create extension if not exists postgis;
 
-create extension postgis_raster;
-create extension postgis_topology;
-create extension postgis_sfcgal;
-
-
+create extension if not exists postgis_raster;
+create extension if not exists postgis_topology;
+-- create extension postgis_sfcgal;
 
 create extension if not exists fuzzystrmatch;
 create extension if not exists unaccent;
