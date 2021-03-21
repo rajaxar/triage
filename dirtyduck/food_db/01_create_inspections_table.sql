@@ -21,4 +21,4 @@ create table if not exists raw.inspections (
        location text
 );
 
-copy raw.inspections from program 'bzcat ./inspections_2014_2017.csv.bz2' HEADER CSV QUOTE '"';
+copy raw.inspections from program 'bzcat ../../dirtyduck/food_db/inspections_2014_2017.csv.bz2' HEADER CSV QUOTE '"';
