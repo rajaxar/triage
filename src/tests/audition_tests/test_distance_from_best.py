@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import factory
-import numpy
+import numpy as np
 import testing.postgresql
 from sqlalchemy import create_engine
 
@@ -97,27 +97,27 @@ def test_DistanceFromBestTable():
             (0, Precision100Factory, Recall100Factory),
             (-0.15, Precision100FactoryMonthOut, Recall100FactoryMonthOut),
         ):
-            PrecFac(model_rel=models["stable_3y_ago"], value=0.6 + add_val)
-            PrecFac(model_rel=models["stable_2y_ago"], value=0.57 + add_val)
-            PrecFac(model_rel=models["stable_1y_ago"], value=0.59 + add_val)
-            PrecFac(model_rel=models["bad_3y_ago"], value=0.4 + add_val)
-            PrecFac(model_rel=models["bad_2y_ago"], value=0.39 + add_val)
-            PrecFac(model_rel=models["bad_1y_ago"], value=0.43 + add_val)
-            PrecFac(model_rel=models["spiky_3y_ago"], value=0.8 + add_val)
-            PrecFac(model_rel=models["spiky_2y_ago"], value=0.4 + add_val)
-            PrecFac(model_rel=models["spiky_1y_ago"], value=0.4 + add_val)
-            RecFac(model_rel=models["stable_3y_ago"], value=0.55 + add_val)
-            RecFac(model_rel=models["stable_2y_ago"], value=0.56 + add_val)
-            RecFac(model_rel=models["stable_1y_ago"], value=0.55 + add_val)
-            RecFac(model_rel=models["bad_3y_ago"], value=0.35 + add_val)
-            RecFac(model_rel=models["bad_2y_ago"], value=0.34 + add_val)
-            RecFac(model_rel=models["bad_1y_ago"], value=0.36 + add_val)
-            RecFac(model_rel=models["spiky_3y_ago"], value=0.35 + add_val)
-            RecFac(model_rel=models["spiky_2y_ago"], value=0.8 + add_val)
-            RecFac(model_rel=models["spiky_1y_ago"], value=0.36 + add_val)
+            PrecFac(model_rel=models["stable_3y_ago"], stochastic_value=0.6 + add_val)
+            PrecFac(model_rel=models["stable_2y_ago"], stochastic_value=0.57 + add_val)
+            PrecFac(model_rel=models["stable_1y_ago"], stochastic_value=0.59 + add_val)
+            PrecFac(model_rel=models["bad_3y_ago"], stochastic_value=0.4 + add_val)
+            PrecFac(model_rel=models["bad_2y_ago"], stochastic_value=0.39 + add_val)
+            PrecFac(model_rel=models["bad_1y_ago"], stochastic_value=0.43 + add_val)
+            PrecFac(model_rel=models["spiky_3y_ago"], stochastic_value=0.8 + add_val)
+            PrecFac(model_rel=models["spiky_2y_ago"], stochastic_value=0.4 + add_val)
+            PrecFac(model_rel=models["spiky_1y_ago"], stochastic_value=0.4 + add_val)
+            RecFac(model_rel=models["stable_3y_ago"], stochastic_value=0.55 + add_val)
+            RecFac(model_rel=models["stable_2y_ago"], stochastic_value=0.56 + add_val)
+            RecFac(model_rel=models["stable_1y_ago"], stochastic_value=0.55 + add_val)
+            RecFac(model_rel=models["bad_3y_ago"], stochastic_value=0.35 + add_val)
+            RecFac(model_rel=models["bad_2y_ago"], stochastic_value=0.34 + add_val)
+            RecFac(model_rel=models["bad_1y_ago"], stochastic_value=0.36 + add_val)
+            RecFac(model_rel=models["spiky_3y_ago"], stochastic_value=0.35 + add_val)
+            RecFac(model_rel=models["spiky_2y_ago"], stochastic_value=0.8 + add_val)
+            RecFac(model_rel=models["spiky_1y_ago"], stochastic_value=0.36 + add_val)
         session.commit()
         distance_table = DistanceFromBestTable(
-            db_engine=engine, models_table="models", distance_table="dist_table"
+            db_engine=engine, models_table="models", distance_table="dist_table", agg_type="worst"
         )
         metrics = [
             {"metric": "precision@", "parameter": "100_abs"},
@@ -128,25 +128,25 @@ def test_DistanceFromBestTable():
             model_group_ids, ["2014-01-01", "2015-01-01", "2016-01-01"], metrics
         )
 
-        # get an ordered list of the models/groups for a particular metric/time
+        # get an ordered list of the model groups for a particular metric/time
         query = """
-            select model_id, raw_value, dist_from_best_case, dist_from_best_case_next_time
+            select model_group_id, raw_value, dist_from_best_case, dist_from_best_case_next_time
             from dist_table where metric = %s and parameter = %s and train_end_time = %s
             order by dist_from_best_case
         """
 
         prec_3y_ago = engine.execute(query, ("precision@", "100_abs", "2014-01-01"))
         assert [row for row in prec_3y_ago] == [
-            (models["spiky_3y_ago"].model_id, 0.8, 0, 0.17),
-            (models["stable_3y_ago"].model_id, 0.6, 0.2, 0),
-            (models["bad_3y_ago"].model_id, 0.4, 0.4, 0.18),
+            (models["spiky_3y_ago"].model_group_id, 0.8, 0, 0.17),
+            (models["stable_3y_ago"].model_group_id, 0.6, 0.2, 0),
+            (models["bad_3y_ago"].model_group_id, 0.4, 0.4, 0.18),
         ]
 
         recall_2y_ago = engine.execute(query, ("recall@", "100_abs", "2015-01-01"))
         assert [row for row in recall_2y_ago] == [
-            (models["spiky_2y_ago"].model_id, 0.8, 0, 0.19),
-            (models["stable_2y_ago"].model_id, 0.56, 0.24, 0),
-            (models["bad_2y_ago"].model_id, 0.34, 0.46, 0.19),
+            (models["spiky_2y_ago"].model_group_id, 0.8, 0, 0.19),
+            (models["stable_2y_ago"].model_group_id, 0.56, 0.24, 0),
+            (models["bad_2y_ago"].model_group_id, 0.34, 0.46, 0.19),
         ]
 
         assert distance_table.observed_bounds == {
@@ -173,14 +173,14 @@ def test_BestDistancePlotter():
         # all of the model groups are within .34 of the best, so pick
         # a number higher than that and all should qualify
         for value in df_dist[df_dist["distance"] == 0.35]["pct_of_time"].values:
-            assert numpy.isclose(value, 1.0)
+            assert np.isclose(value, 1.0)
 
         # model group 1 (stable) should be within 0.11 1/2 of the time
         # if we included 2016 in the train_end_times, this would be 1/3!
         for value in df_dist[
             (df_dist["distance"] == 0.11) & (df_dist["model_group_id"] == 1)
         ]["pct_of_time"].values:
-            assert numpy.isclose(value, 0.5)
+            assert np.isclose(value, 0.5)
 
 
 def test_BestDistancePlotter_plot():
@@ -203,7 +203,7 @@ def test_BestDistancePlotter_plot():
 
 
 def test_BestDistancePlotter_plot_bounds():
-    class FakeDistanceTable(object):
+    class FakeDistanceTable:
         @property
         def observed_bounds(self):
             return {
