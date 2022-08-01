@@ -36,8 +36,7 @@ from triage.component.postmodeling.utils.add_predictions import add_predictions
 from triage.util.conf import load_query_if_needed
 from triage.util.db import create_engine
 
-import verboselogs, logging
-
+import verboselogs
 logger = verboselogs.VerboseLogger(__name__)
 
 
@@ -300,7 +299,7 @@ class Experiment(Command):
             "skip_validation": not self.args.validate,
             "additional_bigtrain_classnames": self.args.add_bigtrain_classes,
         }
-        logger.info(f"Setting up the experiment")
+        logger.info("Setting up the experiment")
         logger.info(f"Configuration file: {self.args.config}")
         logger.info(f"Results will be stored in DB: {self.root.db_url}")
         logger.info(f"Artifacts will be saved in {self.args.project_path}")
@@ -338,7 +337,7 @@ class Experiment(Command):
                     f"Experiment ({self.experiment.experiment_hash})'s configuration file is OK!"
                 )
             except Exception:
-                logger.exception(f"Validation failed!")
+                logger.exception("Validation failed!")
                 logger.info(
                     f"Experiment [config file: {self.args.config}] configuration file is incorrect"
                 )

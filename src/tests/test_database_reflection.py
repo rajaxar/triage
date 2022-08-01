@@ -26,7 +26,7 @@ class TestDatabaseReflection(TestCase):
 
     def test_reflected_table(self):
         self.engine.execute("create table incidents (col1 varchar)")
-        assert dbreflect.reflected_table("incidents", self.engine).exists()
+        assert dbreflect.table_exists("incidents", self.engine)
 
     def test_table_exists(self):
         self.engine.execute("create table incidents (col1 varchar)")

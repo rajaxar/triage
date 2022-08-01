@@ -6,7 +6,6 @@ import random
 from contextlib import contextmanager
 
 import pandas as pd
-import yaml
 import numpy as np
 
 
@@ -60,6 +59,7 @@ def create_labels(engine, labels):
     for row in labels:
         engine.execute("insert into labels.labels values (%s, %s, %s, %s, %s, %s)", row)
     return 'labels.labels'
+
 
 def create_features_table(table_number, table, engine):
     engine.execute(

@@ -103,7 +103,7 @@ class Predictor:
             for (as_of_date,) in session.query(prediction_obj).filter_by(
                 model_id=model_id,
                 matrix_uuid=matrix_store.uuid
-            ).distinct(prediction_obj.as_of_date).values("as_of_date")
+            ).distinct(prediction_obj.as_of_date).with_entities("as_of_date")
         )
         as_of_dates_needed = set(matrix_store.as_of_dates)
         needed = bool(as_of_dates_needed - as_of_dates_in_db)

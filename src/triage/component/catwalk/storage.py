@@ -2,9 +2,6 @@
 
 import itertools
 
-import verboselogs, logging
-logger = verboselogs.VerboseLogger(__name__)
-
 import os
 import pathlib
 from contextlib import contextmanager
@@ -31,6 +28,9 @@ from triage.component.results_schema import (
     TrainAequitas
 )
 from triage.util.pandas import downcast_matrix
+
+import verboselogs
+logger = verboselogs.VerboseLogger(__name__)
 
 
 class Store:
@@ -623,4 +623,3 @@ class ProductionMatrixType(object):
     string_name = "production"
     prediction_obj = ListPrediction
     prediction_metadata_obj = ListPredictionMetadata
-

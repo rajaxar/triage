@@ -2,9 +2,6 @@ import copy
 import datetime
 import importlib
 
-import verboselogs, logging
-logger = verboselogs.VerboseLogger(__name__)
-
 import random
 import sys
 from contextlib import contextmanager
@@ -32,9 +29,13 @@ from .utils import (
     retrieve_experiment_seed_from_run_id,
 )
 
+import verboselogs
+logger = verboselogs.VerboseLogger(__name__)
+
 NO_FEATURE_IMPORTANCE = (
     "Algorithm does not support a standard way" + " to calculate feature importance."
 )
+
 
 
 def flatten_grid_config(grid_config):
@@ -246,7 +247,7 @@ class ModelTrainer:
                     built_in_triage_run=self.run_id,
                     model_size=model_size,
                     **misc_db_parameters,
-                )    
+                )
             session = self.sessionmaker()
             if model_id:
                 logger.notice(
@@ -261,7 +262,7 @@ class ModelTrainer:
                 model_id = model.model_id
                 logger.notice(f"Model {model_id}, not found from previous runs. Adding the new model")
             session.close()
-        
+
         logger.spam(f"Saving feature importances for model_id {model_id}")
         self._save_feature_importances(
             model_id, get_feature_importances(trained_model), feature_names
@@ -270,7 +271,7 @@ class ModelTrainer:
         return model_id
 
     def _train_and_store_model(
-        self, matrix_store, class_path, parameters, model_hash, misc_db_parameters, random_seed, retrain, model_group_id, 
+        self, matrix_store, class_path, parameters, model_hash, misc_db_parameters, random_seed, retrain, model_group_id,
     ):
         """Train a model, cache it, and write metadata to a database
 
@@ -291,12 +292,12 @@ class ModelTrainer:
 
         unique_parameters = self.unique_parameters(parameters)
 
-               
+
         if retrain:
             # if retrain, use the provided model_group_id
             if not model_group_id:
-                raise ValueError("model_group_id should be provided when retrain") 
-            
+                raise ValueError("model_group_id should be provided when retrain")
+
         else:
             model_group_id = self.model_grouper.get_model_group_id(
                 class_path, unique_parameters, matrix_store.metadata, self.db_engine
@@ -304,12 +305,12 @@ class ModelTrainer:
 
         # Writing th model to storage, then getting its size in kilobytes.
         self.model_storage_engine.write(trained_model, model_hash)
-        
+
         logger.debug(
             f"Trained model: hash {model_hash}, model group {model_group_id} "
         )
         logger.spam(f"Cached model: {model_hash}")
- 
+
         model_size = sys.getsizeof(trained_model) / (1024.0)
 
         model_id = self._write_model_to_db(
@@ -324,7 +325,7 @@ class ModelTrainer:
             retrain,
         )
         logger.debug(f"Wrote model {model_id} [{model_hash}] to db")
-        return model_id, model_hash 
+        return model_id, model_hash
 
     @contextmanager
     def cache_models(self):
@@ -382,7 +383,7 @@ class ModelTrainer:
         ]
 
     def process_train_task(
-        self, matrix_store, class_path, parameters, model_hash, misc_db_parameters, random_seed=None, retrain=False, model_group_id=None, 
+        self, matrix_store, class_path, parameters, model_hash, misc_db_parameters, random_seed=None, retrain=False, model_group_id=None,
     ):
         """Trains and stores a model, or skips it and returns the existing id
 

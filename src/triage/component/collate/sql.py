@@ -13,6 +13,7 @@ class CreateTableAs(ex.Executable, ex.ClauseElement):
     def __init__(self, name, query):
         self.name = name
         self.query = query
+        self.inherit_cache = False
 
 
 @compiles(CreateTableAs)
@@ -24,6 +25,7 @@ class InsertFromSelect(ex.Executable, ex.ClauseElement):
     def __init__(self, name, query):
         self.name = name
         self.query = query
+        self.inherit_cache = False
 
 
 @compiles(InsertFromSelect)

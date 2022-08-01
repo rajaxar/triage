@@ -50,7 +50,7 @@ def reflected_table(table_name, db_engine):
     """
     schema, table = split_table(table_name)
     meta = MetaData(schema=schema, bind=db_engine)
-    return Table(table, meta, autoload=True, autoload_from=db_engine)
+    return Table(table, meta, autoload_with=db_engine)
 
 
 def table_exists(table_name, db_engine):
@@ -64,14 +64,14 @@ def table_exists(table_name, db_engine):
     """
 
     schema, table = split_table(table_name)
-    exists=False
+    exists = False
 
     with db_engine.begin() as conn:
         insp = inspect(conn, raiseerr=True)
         exists = insp.has_table(table, schema=schema)
 
     return exists
-     
+
 
 def table_has_data(table_name, db_engine):
     """Check whether the table contains any data

@@ -181,18 +181,16 @@ def test_simple_experiment(experiment_class):
                 [
                     row
                     for row in db_engine.execute(
-                        """
-                        select e.model_id, e.subset_hash from {}_results.evaluations e
+                        f"""
+                        select e.model_id, e.subset_hash from {set_type}_results.evaluations e
                         join triage_metadata.models using (model_id)
                         join triage_metadata.subsets using (subset_hash)
-                        join {}_results.predictions p on (
+                        join {set_type}_results.predictions p on (
                             e.model_id = p.model_id and
                             e.evaluation_start_time <= p.as_of_date and
                             e.evaluation_end_time >= p.as_of_date)
                         group by e.model_id, e.subset_hash
-                        """.format(
-                            set_type, set_type
-                        )
+                        """
                     )
                 ]
             )
@@ -216,10 +214,10 @@ def test_simple_experiment(experiment_class):
                 row
                 for row in db_engine.execute(
                     """
-                select * from triage_metadata.experiments
-                join triage_metadata.experiment_models using (experiment_hash)
-                join triage_metadata.models using (model_hash)
-            """
+                    select * from triage_metadata.experiments
+                    join triage_metadata.experiment_models using (experiment_hash)
+                    join triage_metadata.models using (model_hash)
+                    """
                 )
             ]
         )
@@ -240,9 +238,9 @@ def test_simple_experiment(experiment_class):
             row
             for row in db_engine.execute(
                 """
-            select * from test_results.individual_importances
-            join triage_metadata.models using (model_id)
-        """
+                select * from test_results.individual_importances
+                join triage_metadata.models using (model_id)
+                """
             )
         ]
         assert len(individual_importances) == num_predictions * 2  # only 2 features
@@ -252,7 +250,8 @@ def test_simple_experiment(experiment_class):
             row
             for row in db_engine.execute(
                 """
-            select matrix_type, num_observations from triage_metadata.matrices"""
+                select matrix_type, num_observations from triage_metadata.matrices
+                """
             )
         ]
         types = [i[0] for i in matrices]
@@ -267,8 +266,9 @@ def test_simple_experiment(experiment_class):
         linked_matrices = list(
             db_engine.execute(
                 """select * from triage_metadata.matrices
-            join triage_metadata.experiment_matrices using (matrix_uuid)
-            join triage_metadata.experiments using (experiment_hash)"""
+                join triage_metadata.experiment_matrices using (matrix_uuid)
+                join triage_metadata.experiments using (experiment_hash)
+                """
             )
         )
         assert len(linked_matrices) == len(matrices)

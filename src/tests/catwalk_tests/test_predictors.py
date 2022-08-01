@@ -115,17 +115,12 @@ def test_predictions_table(predictor, predict_proba, matrix_type):
     records = [
         row
         for row in predictor.db_engine.execute(
-            """select entity_id, as_of_date
-        from {}_results.predictions
-        join triage_metadata.models using (model_id)""".format(
-                matrix_type, matrix_type
-            )
+            f"""select entity_id, as_of_date
+            from {matrix_type}_results.predictions
+            join triage_metadata.models using (model_id)"""
         )
     ]
     assert len(records) == 6
-
-
-
 
 
 @with_matrix_types
@@ -204,7 +199,7 @@ def test_predictor_get_train_columns(predict_setup_args):
     )
 
     # Runs the same test for training and testing predictions
-    for store, mat_type in zip((train_store, test_store), ("train", "test")):
+    for store, matrix_type in zip((train_store, test_store), ("train", "test")):
         predict_proba = predictor.predict(
             model_id,
             store,
@@ -220,11 +215,9 @@ def test_predictor_get_train_columns(predict_setup_args):
         records = [
             row
             for row in db_engine.execute(
-                """select entity_id, as_of_date
-            from {}_results.predictions
-            join triage_metadata.models using (model_id)""".format(
-                    mat_type, mat_type
-                )
+                f"""select entity_id, as_of_date
+                from {matrix_type}_results.predictions
+                join triage_metadata.models using (model_id)"""
             )
         ]
         assert len(records) > 0

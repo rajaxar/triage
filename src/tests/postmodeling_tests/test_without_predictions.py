@@ -23,7 +23,7 @@ def test_ModelGroupEvaluator_predictions(model_group_evaluator):
 
 
 def test_ModelEvaluator_metadata(model_evaluator):
-    assert all(value for key, value in model_evaluator.metadata.items())
+    assert all(value for key, value in model_evaluator.metadata._mapping.items())
 
 
 def test_ModelEvaluator_predictions(model_evaluator):

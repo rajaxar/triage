@@ -1,10 +1,11 @@
 import inspect
-import verboselogs, logging
-logger = verboselogs.VerboseLogger(__name__)
 
 from numpy import exp, log, average
 
 from .metric_directionality import greater_is_better, best_in_series, idxbest
+
+import verboselogs
+logger = verboselogs.VerboseLogger(__name__)
 
 
 def random_model_group(df, train_end_time, n=1):
@@ -194,9 +195,8 @@ def most_frequent_best_dist(
     """
 
     met_df = df.loc[(df["metric"] == metric) & (df["parameter"] == parameter)]
-    met_df["within_dist"] = (df["dist_from_best_case"] <= dist_from_best_case).astype(
-        "int"
-    )
+    met_df.loc[:, "within_dist"] = (df["dist_from_best_case"] <= dist_from_best_case).\
+        astype("int")
     if n == 1:
         # sample(frac=1) to shuffle rows so we don't accidentally introduce bias in breaking ties
         return [

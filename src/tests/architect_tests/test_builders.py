@@ -3,7 +3,6 @@ from unittest import TestCase, mock
 
 import pandas as pd
 import testing.postgresql
-from unittest.mock import Mock
 
 from triage import create_engine
 from contextlib import contextmanager
@@ -360,9 +359,9 @@ def test_make_entity_date_table_include_missing_labels():
         label_timespan="1 month",
     )
     # this line adds the new entity-date combo as an expected one
-    ids_dates = ids_dates.append(
-        {"entity_id": 0, "as_of_date": datetime.date(2016, 6, 1)}, ignore_index=True
-    )
+    new_id = pd.DataFrame.from_dict({"entity_id": [0],
+                                     "as_of_date": [datetime.date(2016, 6, 1)]})
+    ids_dates = pd.concat([ids_dates, new_id])
 
     with testing.postgresql.Postgresql() as postgresql:
         # create an engine and generate a table with fake feature data

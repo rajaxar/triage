@@ -8,7 +8,7 @@ logger = verboselogs.VerboseLogger(__name__)
 
 
 def experiment_config_from_model_id(db_engine, model_id):
-    """Get original experiment config from model_id 
+    """Get original experiment config from model_id
     Args:
             db_engine (sqlalchemy.db.engine)
             model_id (int) The id of a given model in the database
@@ -18,7 +18,7 @@ def experiment_config_from_model_id(db_engine, model_id):
     get_experiment_query = '''select experiments.config
     from triage_metadata.triage_runs
     join triage_metadata.models on (triage_runs.id = models.built_in_triage_run)
-    join triage_metadata.experiments 
+    join triage_metadata.experiments
         on (experiments.experiment_hash = triage_runs.run_hash and triage_runs.run_type='experiment')
     where model_id = %s
     '''
@@ -27,7 +27,7 @@ def experiment_config_from_model_id(db_engine, model_id):
 
 
 def experiment_config_from_model_group_id(db_engine, model_group_id):
-    """Get original experiment config from model_id 
+    """Get original experiment config from model_id
     Args:
             db_engine (sqlalchemy.db.engine)
             model_id (int) The id of a given model in the database
@@ -60,7 +60,7 @@ def get_model_group_info(db_engine, model_group_id):
 
 
 def train_matrix_info_from_model_id(db_engine, model_id):
-    """Get original train matrix information from model_id 
+    """Get original train matrix information from model_id
     Args:
             db_engine (sqlalchemy.db.engine)
             model_id (int) The id of a given model in the database
@@ -77,14 +77,14 @@ def train_matrix_info_from_model_id(db_engine, model_id):
 
 
 def test_matrix_info_from_model_id(db_engine, model_id):
-    """Get original test matrix information from model_id 
+    """Get original test matrix information from model_id
 
     Note: because a model may have been tested on multiple matrices, this
           chooses the matrix associated with the most recently run experiment
           (then randomly if multiple test matrices are associated with the model_id
           in that experiment). Generally, this will be an edge case, but may be
           worth considering providing more control over which to choose here.
-    
+
     Args:
             db_engine (sqlalchemy.db.engine)
             model_id (int) The id of a given model in the database
@@ -139,7 +139,7 @@ def get_feature_names(aggregation, matrix_metadata):
     logger.spam("Feature group = %s", feature_group)
     feature_names_in_group = [f for f in matrix_metadata['feature_names'] if re.match(f'\\A{feature_prefix}_', f)]
     logger.spam("Feature names in group = %s", feature_names_in_group)
-    
+
     return feature_group, feature_names_in_group
 
 
@@ -151,7 +151,7 @@ def get_feature_needs_imputation_in_train(aggregation, feature_names):
     """
     features_imputed_in_train = [
         f for f in set(feature_names)
-        if not f.endswith('_imp') 
+        if not f.endswith('_imp')
         and aggregation.imputation_flag_base(f) + '_imp' in feature_names
     ]
     logger.spam("Features imputed in train = %s", features_imputed_in_train)
@@ -166,19 +166,19 @@ def get_feature_needs_imputation_in_production(aggregation, db_engine):
     """
     with db_engine.begin() as conn:
         nulls_results = conn.execute(aggregation.find_nulls())
-    
-    null_counts = nulls_results.first().items()
+
+    null_counts = nulls_results.first()._mapping.items()
     features_imputed_in_production = [col for (col, val) in null_counts if val is not None and val > 0]
-    
+
     return features_imputed_in_production
 
 
 def get_retrain_config_from_model_id(db_engine, model_id):
     query = """
     SELECT re.config FROM triage_metadata.models m
-    LEFT JOIN triage_metadata.triage_runs r 
-        ON m.built_in_triage_run = r.id 
-    LEFT JOIN triage_metadata.retrain re 
+    LEFT JOIN triage_metadata.triage_runs r
+        ON m.built_in_triage_run = r.id
+    LEFT JOIN triage_metadata.retrain re
         ON (re.retrain_hash = r.run_hash and r.run_type='retrain')
     WHERE m.model_id = %s;
     """
@@ -204,5 +204,3 @@ def save_retrain_and_get_hash(config, db_engine):
     session.commit()
     session.close()
     return retrain_hash
-
-

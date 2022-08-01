@@ -60,7 +60,7 @@ class ModelGroupEvaluator:
 
         row_dict, list_dict = {}, []
         for row in query_execute:
-            for tup in row.items():
+            for tup in row._mapping.items():
                 row_dict = {**row_dict, **{tup[0]: tup[1]}}
             list_dict.append(row_dict)
 
@@ -919,7 +919,7 @@ class ModelGroupEvaluator:
                 self.same_time_models[['train_end_time', 'model_id_array']].iterrows():
                     f_imp_filter_group = \
                     f_importances_filter[f_importances_filter['model_id'].isin(values[1])]
-                    
+
                     if top_n_features is not None:
                         f_imp_date = f_imp_filter_group.copy()
                         f_imp_date_filter = \

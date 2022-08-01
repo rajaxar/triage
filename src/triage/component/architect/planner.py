@@ -1,11 +1,11 @@
 import copy
 import itertools
 
-import verboselogs, logging
-logger = verboselogs.VerboseLogger(__name__)
-
 from triage.component.catwalk.utils import filename_friendly_hash
 from . import utils, entity_date_table_generators
+
+import verboselogs
+logger = verboselogs.VerboseLogger(__name__)
 
 
 class Planner:
@@ -37,9 +37,9 @@ class Planner:
             "matrix_metadata": matrix_metadata,
             "matrix_type": matrix_metadata["matrix_type"],
         }
-    
+
     @staticmethod
-    def make_metadata( 
+    def make_metadata(
         matrix_definition,
         feature_dictionary,
         label_name,

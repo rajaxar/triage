@@ -1,11 +1,6 @@
-import verboselogs, logging
-
-logger = verboselogs.VerboseLogger(__name__)
-
 from abc import ABC, abstractmethod
 import cProfile
 import marshal
-import os
 import random
 import time
 import itertools
@@ -87,6 +82,9 @@ from triage.database_reflection import table_has_data
 from triage.util.conf import dt_from_str, parse_from_obj, load_query_if_needed
 from triage.util.db import get_for_update
 from triage.util.introspection import bind_kwargs, classpath
+
+import verboselogs
+logger = verboselogs.VerboseLogger(__name__)
 
 
 class ExperimentBase(ABC):
@@ -173,14 +171,14 @@ class ExperimentBase(ABC):
         self.replace = replace
         if self.replace:
             logger.notice(
-                f"Replace flag is set to true. Matrices, models, "
+                "Replace flag is set to true. Matrices, models, "
                 "evaluations and predictions (if they exist) will be replaced"
             )
 
         self.save_predictions = save_predictions
         if not self.save_predictions:
             logger.notice(
-                f"Save predictions flag is set to false. "
+                "Save predictions flag is set to false. "
                 "Individual predictions won't be stored in the predictions "
                 "table. This will decrease both the running time "
                 "of an experiment and also decrease the space needed in the db"
@@ -189,7 +187,7 @@ class ExperimentBase(ABC):
         self.skip_validation = skip_validation
         if self.skip_validation:
             logger.notice(
-                f"Warning: Skip validation flag is set to true. "
+                "Warning: Skip validation flag is set to true. "
                 "The experiment config file specified won't be validated. "
                 "This will reduce (a little) the running time of the experiment, "
                 "but has some potential risks, e.g. the experiment could fail"
@@ -221,13 +219,13 @@ class ExperimentBase(ABC):
         self.additional_bigtrain_classnames = additional_bigtrain_classnames
         # only fill default values for full runs
         if not partial_run:
-            ## Defaults to sane values
+            # Defaults to sane values
             self.config["temporal_config"] = fill_timechop_config_missing(
                 self.config, self.db_engine
             )
-            ## Defaults to all the entities found in the features_aggregation's from_obj
+            # Defaults to all the entities found in the features_aggregation's from_obj
             self.config["cohort_config"] = fill_cohort_config_missing(self.config)
-            ## Defaults to all the feature_aggregation's prefixes
+            # Defaults to all the feature_aggregation's prefixes
             self.config["feature_group_definition"] = fill_feature_group_definition(
                 self.config
             )
@@ -251,8 +249,6 @@ class ExperimentBase(ABC):
             f"Using random seed [{self.random_seed}] for running the experiment"
         )
         random.seed(self.random_seed)
-
-        ###################### RUBICON ######################
 
         self.experiment_hash = save_experiment_and_get_hash(self.config, self.db_engine)
         logger.debug(f"Experiment hash [{self.experiment_hash}] assigned")
@@ -532,7 +528,7 @@ class ExperimentBase(ABC):
 
         """
         split_definitions = self.chopper.chop_time()
-        logger.verbose(f"Computed and stored temporal split definitions")
+        logger.verbose("Computed and stored temporal split definitions")
         logger.debug(f"Temporal split definitions: {split_definitions}")
         logger.spam("\n----TIME SPLIT SUMMARY----\n")
         logger.spam("Number of time splits: {len(split_definitions)}")
@@ -884,7 +880,7 @@ class ExperimentBase(ABC):
                 f"{experiment.grid_size} models groups will be trained, tested and evaluated"
             )
 
-        logger.info(f"Training, testing and evaluating models")
+        logger.info("Training, testing and evaluating models")
         logger.verbose(f"{len(batches)} train/test tasks found.")
         model_hashes = set(
             task["train_kwargs"]["model_hash"]

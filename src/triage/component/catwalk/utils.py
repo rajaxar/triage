@@ -6,10 +6,6 @@ import os
 import pandas as pd
 import json
 
-import verboselogs, logging
-
-logger = verboselogs.VerboseLogger(__name__)
-
 import random
 from itertools import chain
 from functools import partial
@@ -28,6 +24,9 @@ from triage.component.results_schema import (
     ExperimentModel,
     TriageRun,
 )
+
+import verboselogs
+logger = verboselogs.VerboseLogger(__name__)
 
 
 def filename_friendly_hash(inputs):

@@ -1,8 +1,9 @@
-import verboselogs, logging
-logger = verboselogs.VerboseLogger(__name__)
-
 import os
 import yaml
+
+import verboselogs
+logger = verboselogs.VerboseLogger(__name__)
+
 
 def fill_timechop_config_missing(config, db_engine):
     """
