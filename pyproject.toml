@@ -64,12 +64,6 @@ pytest-cov = "^3.0.0"
 moto = "^3.1.16"
 hypothesis = "^6.49.1"
 csvkit = "^1.0.7"
-fakeredis = "^1.8.1"
-rq = "^1.10.1"
-
-[tool.poetry.extras]
-rq = ["rq", "redis"]
-
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

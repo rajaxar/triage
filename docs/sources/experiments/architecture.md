@@ -5,7 +5,7 @@
 This document is aimed at people wishing to contribute to Triage development. It explains the design and architecture of the Experiment class.
 
 ## Dependency Graphs
-For a general overview of how the parts of an experiment depend on each other, refer to the graphs below. 
+For a general overview of how the parts of an experiment depend on each other, refer to the graphs below.
 
 ### Experiment (high-level)
 <div class="mermaid">
@@ -391,7 +391,7 @@ Currently there are three methods that must be implemented by subclasses of Expe
 
 ### Abstract Methods
 
-- `process_query_tasks` - Run feature generation queries. Receives a list of tasks. each `task` actually represents a table and is split into three lists of queries to enable the implementation to avoid deadlocks: `prepare` (table creation), `inserts` (a collection of INSERT INTO SELECT queries), and `finalize` (indexing). `prepare` needs to be run before the inserts and `finalize` is best run after the inserts, so it is advised that only the inserts are parallelized. The subclass should run each individual batch of queries by calling `self.feature_generator.run_commands([list of queries])`, which will run all of the queries serially, so the implementation can send a batch of queries to each worker instead of having each individual query be on a new worker. 
+- `process_query_tasks` - Run feature generation queries. Receives a list of tasks. each `task` actually represents a table and is split into three lists of queries to enable the implementation to avoid deadlocks: `prepare` (table creation), `inserts` (a collection of INSERT INTO SELECT queries), and `finalize` (indexing). `prepare` needs to be run before the inserts and `finalize` is best run after the inserts, so it is advised that only the inserts are parallelized. The subclass should run each individual batch of queries by calling `self.feature_generator.run_commands([list of queries])`, which will run all of the queries serially, so the implementation can send a batch of queries to each worker instead of having each individual query be on a new worker.
 - `process_matrix_build_tasks` - Run matrix build tasks (that assume all the necessary label/cohort/feature tables have been built). Receives a dictionary of tasks. Each key is a matrix UUID, and each value is a dictionary that has all the necessary keyword arguments to call `self.matrix_builder.build_matrix` to build one matrix.
 - `process_train_test_batches` - Run model train/test task batches (that assume all matrices are built). Receives a list of `triage.component.catwalk.TaskBatch` objects, each of which has a list of tasks, a description of those tasks, and whether or not that batch is safe to run in parallel. Within this, each task is a dictionary that has all the necessary keyword arguments to call `self.model_train_tester.process_task` to train and test one model. Each task covers model training, prediction (on both test and train matrices), model evaluation (on both test and train matrices), and saving of global and individual feature importances.
 
@@ -399,4 +399,3 @@ Currently there are three methods that must be implemented by subclasses of Expe
 
 - [SingleThreadedExperiment](https://github.com/dssg/triage/blob/master/src/triage/experiments/singlethreaded.py) is a barebones implementation that runs everything serially.
 - [MultiCoreExperiment](https://github.com/dssg/triage/blob/master/src/triage/experiments/multicore.py) utilizes local multiprocessing to run tasks through a worker pool. Reading this is helpful to see the minimal implementation needed for some parallelization.
-- [RQExperiment](https://github.com/dssg/triage/blob/master/src/triage/experiments/rq.py) - utilizes an RQ worker cluster to allow the tasks to be parallelized either locally or distributed to other. Does not take care of spawning a cluster or any other infrastructural concerns: it expects that the cluster is running somewhere and is reading from the same Redis instance that is passed to the `RQExperiment`. The `RQExperiment` simply enqueues tasks and waits for them to be completed. Reading this is helpful as a simple example of how to enable distributed computing.
