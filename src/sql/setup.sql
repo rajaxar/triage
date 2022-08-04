@@ -23,17 +23,37 @@ create schema if not exists triage_production;
 
 raise notice 'populating schema triage_metadata';
 do $triage_metadata$ begin
-	set search_path = triage_metadata, public;
+    set search_path = triage_metadata, public;
 
-	drop type if exists triage_run_status;
-	create type triage_run_status as enum ('started', 'completed', 'failed');
+    drop type if exists triage_run_status;
+    create type triage_run_status as enum ('started', 'completed', 'failed');
 
-	drop type if exists matrix_type;
-	create type matrix_type as enum ('train', 'test');
+    drop type if exists matrix_type;
+    create type matrix_type as enum ('train', 'test');
 
-	drop table if exists experiments;
-	create table if not exists experiments (
-               experiment_hash              text primary key
+    drop type if exists tiebreaker_ordering;
+    create type tiebreaker_ordering as enum ('best', 'worst', 'random');
+
+    drop type if exists metric;
+    create type metric as enum (
+           'precision@'
+           , 'recall@'
+           , 'fbeta@'
+           , 'f1'
+           , 'accuracy'
+           , 'roc_auc'
+           , 'average precision score'
+           , 'true positives@'
+           , 'true negatives@'
+           , 'false positives@'
+           , 'false negatives@'
+           , 'fpr@'
+    );
+
+    drop table if exists experiments;
+    create table if not exists experiments (
+               experiment_id                integer generated always as identity primary key
+               , experiment_hash            text unique
                , config                     jsonb
                , time_splits                smallint
                , as_of_times                smallint
@@ -42,22 +62,24 @@ do $triage_metadata$ begin
                , matrices_needed            smallint
                , grid_size                  smallint
                , models_needed              smallint
-	);
+    );
 
-	drop table if exists retrain;
-	create table if not exists retrain (
-		retrain_hash      text primary key
-		, config          jsonb
-                , prediction_date timestamp
-	);
+    drop table if exists retrains;
+    create table if not exists retrains (
+        retrain_id        integer generated always as identity primary key
+        , retrain_hash      text unique
+        , config          jsonb
+        , prediction_date timestamp with time zone
+        , created_at      timestamp with time zone default now()
+    );
 
-        drop table if exists triage_runs;
-	create table if not exists triage_runs (
-		triage_run_id      serial primary key
-                , start_time       timestamp
+    drop table if exists triage_runs;
+    create table if not exists triage_runs (
+             triage_run_id         integer generated always as identity primary key
+                , start_time       timestamp with time zone
                 , start_method     text
                 , git_hash         text
-                , python_versio    text
+                , python_version   text
                 , run_type         text
                 , run_hash         text
                 , platform         text
@@ -72,7 +94,7 @@ do $triage_metadata$ begin
                 , matrices_made           smallint default 0
                 , matrices_skipped        smallint default 0
                 , matrices_errored        smallint default 0
-                , model_building_started  timestamp
+                , model_building_started  timestamp with time zone
                 , models_made           smallint default 0
                 , models_skipped        smallint default 0
                 , models_errored        smallint default 0
@@ -83,31 +105,33 @@ do $triage_metadata$ begin
                 , cohort_table_name     text
                 , labels_table_name     text
                 , bias_hash             text
-	) ;
+    ) ;
 
-	drop table if exists subsets;
-	create table if not exists subsets (
-		subset_hash      text primary key
-		, config         jsonb
-                , created_at     timestamp with time zone not null default now()
-	);
+    drop table if exists subsets;
+    create table if not exists subsets (
+        subset_id        integer generated always as identity primary key
+        , subset_hash    text unique
+        , config         jsonb
+        , created_at     timestamp with time zone not null default now()
+    );
 
 
-	drop table if exists model_groups;
-	create table if not exists model_groups (
-               model_group_id     serial primary key
+    drop table if exists model_groups;
+    create table if not exists model_groups (
+               model_group_id     integer generated always as identity primary key
                , model_type       text
                , hyperparameters  jsonb
                , feature_list     text[]
                , model_config     jsonb
-	);
+    );
 
 
-        drop table if exists matrices;
-	create table if not exists matrices (
-                matrix_id         text
-                , matrix_uuid     text primary key
-                , matrix_type     matrix_type
+    drop table if exists matrices;
+    create table if not exists matrices (
+                matrix_id            integer generated always as identity primary key
+                , experiment_id      integer references experiments (experiment_id)  -- was built_by_experiment
+                , matrix_hash        text unique                                     -- was matrix_uuid
+                , matrix_type        matrix_type
                 , labeling_window    tstzrange
                 , num_observations   integer
                 , creation_time      timestamp with time zone default now()
@@ -116,26 +140,24 @@ do $triage_metadata$ begin
                 , matrix_metadata     jsonb
                 , built_by_experiment text
                 , feature_dictionary  jsonb
-	);
+    );
 
-        alter table  matrices add foreign key (built_by_experiment) references experiments (experiment_hash);
+    -- -- alter table  matrices add foreign key (built_by_experiment) references experiments (experiment_hash);
 
-	drop table if exists experiment_matrices;
-	create table if not exists experiment_matrices (
-		experiment_hash      text
-		, matrix_uuid        text
-                , primary key (experiment_hash, matrix_uuid)
-	);
+    drop table if exists experiments_matrices;
+    create table if not exists experiments_matrices (
+        experiment_id      integer references experiments (experiment_id) on update cascade on delete cascade
+        , matrix_id        integer references matrices (matrix_id) on update cascade
+        , primary key (experiment_id, matrix_id)
+    );
 
-        alter table  experiment_matrices add foreign key (experiment_hash) references experiments (experiment_hash);
-        alter table  experiment_matrices add foreign key (matrix_uuid) references matrices (matrix_uuid);
+    -- --     -- alter table  experiment_matrices add foreign key (experiment_hash) references experiments (experiment_hash);
+    -- --     -- alter table  experiment_matrices add foreign key (matrix_hash) references matrices (matrix_hash);
 
-
-        -- TODO: Check the columns!
-	drop table if exists models;
-	create table if not exists models (
-               model_id           serial primary key
-               , model_group_id   integer
+    drop table if exists models;
+    create table if not exists models (
+               model_id           integer generated always as identity primary key
+               , model_group_id   integer references model_groups(model_group_id)
                , model_hash       text unique
                , run_time         timestamp with time zone
                , batch_run_time   timestamp with time zone
@@ -144,90 +166,93 @@ do $triage_metadata$ begin
                , model_comment    text
                , batch_comment    text
                , config           jsonb
-               , built_in_triage_run  integer
+               , built_in_triage_run  integer references triage_runs (triage_run_id)
                , train_end_time       timestamp with time zone
                , test                 boolean
-               , train_matrix_uuid    text
+               , trained_on_matrix    integer references matrices (matrix_id)   -- was train_matrix_hash
                , model_size           real
                , random_seed          integer
-	);
+    );
 
-        alter table  models add foreign key (model_group_id) references model_groups (model_group_id);
-        alter table  models add foreign key (built_in_triage_run) references triage_runs (triage_run_id);
-        alter table  models add foreign key (train_matrix_uuid) references matrices (matrix_uuid);
+    --     -- alter table  models add foreign key (model_group_id) references model_groups (model_group_id);
+    --     -- alter table  models add foreign key (built_in_triage_run) references triage_runs (triage_run_id);
+    --     -- alter table  models add foreign key (train_matrix_hash) references matrices (matrix_hash);
 
-	drop table if exists experiment_models;
-	create table if not exists experiment_models (
-        	experiment_hash      text
-		, model_hash         text
-                , primary key (experiment_hash, model_hash)
-	);
+    drop table if exists experiments_models;
+    create table if not exists experiments_models (
+        experiment_id      integer references experiments(experiment_id) on update cascade on delete cascade
+        , model_id         integer references models(model_id) on update cascade
+        , primary key (experiment_id, model_id)
+    );
 
-        alter table  experiment_models add foreign key (experiment_hash) references experiments (experiment_hash);
-        alter table  experiment_models add foreign key (model_hash) references models (model_hash);
+    --     -- alter table  experiment_models add foreign key (experiment_hash) references experiments (experiment_hash);
+    --     -- alter table  experiment_models add foreign key (model_hash) references models (model_hash);
 
 
-	drop table if exists retrain_models;
-	create table if not exists retrain_models (
-         	retrain_hash      text
-		, model_hash      text
-                , primary key (retrain_hash, model_hash)
-	);
+    drop table if exists retrains_models;
+    create table if not exists retrains_models (
+        retrain_id      integer references retrains (retrain_id)
+        , model_id      integer references models (model_id)
+        , primary key (retrain_id, model_id)
+    );
 
-        alter table  retrain_models add foreign key (model_hash) references models (model_hash);
-        alter table  retrain_models add foreign key (retrain_hash) references retrain (retrain_hash);
+    --     -- alter table  retrain_models add foreign key (model_hash) references models (model_hash);
+    --     -- alter table  retrain_models add foreign key (retrain_hash) references retrain (retrain_hash);
 
 end $triage_metadata$;
 
 raise notice 'populating schema train_results';
 do $train_results$ begin
-	set search_path = train_results, public;
+    set search_path = train_results, public;
+
 
     drop table if exists feature_importances;
     create table if not exists feature_importances (
-        feature_importance_id serial
-        , model_id integer not null references triage_metadata.models (model_id)
-        , feature  text
-        , feature_importance real
-        , rank_abs           smallint
-        , rank_pct           real
-        , primary key (feature_importance_id, feature)
+        feature_importance_id integer generated always as identity
+        , model_id            integer references triage_metadata.models (model_id)
+        , feature             text
+        , feature_importance  real
+        , rank_abs            smallint
+        , rank_pct            real
+        , primary key (model_id, feature_importance_id)
     );
 
     drop table if exists predictions;
     create table if not exists predictionss (
-        model_id integer not null references triage_metadata.models (model_id)
-        , entity_id  integer
-        , as_of_date timestamp with time zone
-        , score      real
-        , label_value smallint
-        , rank_abs_no_ties smallint
-        , rank_abs_with_ties smallint
-        , rank_pct_no_ties   real
-        , rank_pct_with_ties real
-        , matrix_uuid        text not null references triage_metadata.matrices (matrix_uuid)
+        model_id              integer references triage_metadata.models (model_id)
+        , entity_id           integer
+        , as_of_date          timestamp with time zone
+        , score               real
+        , label_value         smallint
+        , rank_abs_no_ties    smallint
+        , rank_abs_with_ties  smallint
+        , rank_pct_no_ties    real
+        , rank_pct_with_ties  real
+        , matrix_id           integer references triage_metadata.matrices (matrix_id)
         , test_label_timespan tstzrange
-        , primary key (entity_id, as_of_date)
+        , primary key (model_id, entity_id, as_of_date)
     );
 
     drop table if exists prediction_metadata;
     create table if not exists prediction_metadata (
-        model_id integer not null references triage_metadata.models (model_id)
-        , matrix_uuid        text not null references triage_metadata.matrices (matrix_uuid)
-        , tiebreaker_ordering text
+        model_id              integer references triage_metadata.models (model_id)
+        , matrix_id           integer references triage_metadata.matrices (matrix_id)
+        , tiebreaker_ordering triage_metadata.tiebreaker_ordering
         , random_seed         integer
         , predictions_saved   boolean
+        , primary key (model_id, matrix_id)
     );
 
     drop table if exists evaluations;
     create table if not exists evaluations (
-        model_id integer not null references triage_metadata.models (model_id)
-        , subset_hash             text
+        model_id                  integer references triage_metadata.models (model_id)
         , evaluation_start_time   timestamp with time zone
-        , evaluation_edn_time     timestamp with time zone
+        , evaluation_end_time     timestamp with time zone
         , as_of_date_frequency    tstzrange
-        , matrix_uuid        text not null references triage_metadata.matrices (matrix_uuid)
-        , parameter          text
+        , subset_id               integer references triage_metadata.subsets (subset_id)
+        , metric                  triage_metadata.metric
+        , parameter               text
+        , matrix_id               integer references triage_metadata.matrices (matrix_id)
         , num_labeled_examples        integer
         , num_labeled_above_threshold integer
         , num_positive_labels         integer
@@ -237,20 +262,21 @@ do $train_results$ begin
         , stochastic_value            real
         , num_sort_trials             smallint
         , standard_deviation          real
-        , primary key(subset_hash, parameter)
+        , primary key(model_id, evaluation_start_time, evaluation_end_time, as_of_date_frequency, metric, parameter, subset_id)
     );
 
     drop table if exists aequitas;
     create table if not exists aequitas (
-        model_id integer not null references triage_metadata.models (model_id)
-        , subset_hash             text
+        model_id                  integer references triage_metadata.models (model_id)
+        , subset_id               integer references triage_metadata.subsets (subset_id)
+        , tie_breaker             triage_metadata.tiebreaker_ordering
         , evaluation_start_time   timestamp with time zone
-        , evaluation_edn_time     timestamp with time zone
+        , evaluation_end_time     timestamp with time zone
         , as_of_date_frequency    tstzrange
-        , matrix_uuid        text not null references triage_metadata.matrices (matrix_uuid)
         , parameter          text
         , attribute_name     text
         , attribute_value    text
+        , matrix_id          integer not null references triage_metadata.matrices (matrix_id)
         , total_entities     integer
         , group_label_pos    integer
         , group_label_neg    integer
@@ -267,7 +293,7 @@ do $train_results$ begin
         , pprev              integer
         , tpr                integer
         , tnr                integer
-        , "for"                integer
+        , "for"              integer
         , fdr                integer
         , fpr                integer
         , fnr                integer
@@ -304,7 +330,7 @@ do $train_results$ begin
         , "Equalized_Odds" boolean
         , "Unsupervised_Fairness" boolean
         , "Supervised_Fairness" boolean
-        , primary key (subset_hash, parameter, attribute_name, attribute_value)
+        , primary key (model_id, subset_id, tie_breaker, evaluation_start_time, evaluation_end_time, parameter, attribute_name, attribute_value)
     );
 
 
@@ -331,38 +357,40 @@ do $test_results$ begin
 
     drop table if exists predictions;
     create table if not exists predictionss (
-        model_id integer not null references triage_metadata.models (model_id)
-        , entity_id  integer
-        , as_of_date timestamp with time zone
-        , score      real
-        , label_value smallint
-        , rank_abs_no_ties smallint
+        model_id             integer references triage_metadata.models (model_id)
+        , entity_id          integer
+        , as_of_date         timestamp with time zone
+        , score              real
+        , label_value        smallint
+        , rank_abs_no_ties   smallint
         , rank_abs_with_ties smallint
         , rank_pct_no_ties   real
         , rank_pct_with_ties real
-        , matrix_uuid        text not null references triage_metadata.matrices (matrix_uuid)
+        , matrix_id          integer references triage_metadata.matrices (matrix_id)
         , test_label_timespan tstzrange
-        , primary key (entity_id, as_of_date)
+        , primary key (model_id, entity_id, as_of_date)
     );
 
     drop table if exists prediction_metadata;
     create table if not exists prediction_metadata (
-        model_id integer not null references triage_metadata.models (model_id)
-        , matrix_uuid        text not null references triage_metadata.matrices (matrix_uuid)
-        , tiebreaker_ordering text
+        model_id              integer references triage_metadata.models (model_id)
+        , matrix_id           integer references triage_metadata.matrices (matrix_id)
+        , tiebreaker_ordering triage_metadata.tiebreaker_ordering
         , random_seed         integer
         , predictions_saved   boolean
+        , primary key (model_id, matrix_id)
     );
 
     drop table if exists evaluations;
     create table if not exists evaluations (
-        model_id integer not null references triage_metadata.models (model_id)
-        , subset_hash             text
+        model_id                  integer references triage_metadata.models (model_id)
         , evaluation_start_time   timestamp with time zone
-        , evaluation_edn_time     timestamp with time zone
+        , evaluation_end_time     timestamp with time zone
         , as_of_date_frequency    tstzrange
-        , matrix_uuid        text not null references triage_metadata.matrices (matrix_uuid)
-        , parameter          text
+        , subset_id               integer references triage_metadata.subsets (subset_id)
+        , metric                  triage_metadata.metric
+        , parameter               text
+        , matrix_id               integer references triage_metadata.matrices (matrix_id)
         , num_labeled_examples        integer
         , num_labeled_above_threshold integer
         , num_positive_labels         integer
@@ -372,20 +400,21 @@ do $test_results$ begin
         , stochastic_value            real
         , num_sort_trials             smallint
         , standard_deviation          real
-        , primary key (subset_hash, parameter)
+        , primary key(model_id, evaluation_start_time, evaluation_end_time, as_of_date_frequency, metric, parameter, subset_id)
     );
 
     drop table if exists aequitas;
     create table if not exists aequitas (
-        model_id integer not null references triage_metadata.models (model_id)
-        , subset_hash             text
+        model_id                  integer references triage_metadata.models (model_id)
+        , subset_id               integer references triage_metadata.subsets (subset_id)
+        , tie_breaker             triage_metadata.tiebreaker_ordering
         , evaluation_start_time   timestamp with time zone
-        , evaluation_edn_time     timestamp with time zone
+        , evaluation_end_time     timestamp with time zone
         , as_of_date_frequency    tstzrange
-        , matrix_uuid        text not null references triage_metadata.matrices (matrix_uuid)
         , parameter          text
         , attribute_name     text
         , attribute_value    text
+        , matrix_id          integer not null references triage_metadata.matrices (matrix_id)
         , total_entities     integer
         , group_label_pos    integer
         , group_label_neg    integer
@@ -402,7 +431,7 @@ do $test_results$ begin
         , pprev              integer
         , tpr                integer
         , tnr                integer
-        , "for"                integer
+        , "for"              integer
         , fdr                integer
         , fpr                integer
         , fnr                integer
@@ -439,7 +468,7 @@ do $test_results$ begin
         , "Equalized_Odds" boolean
         , "Unsupervised_Fairness" boolean
         , "Supervised_Fairness" boolean
-        , primary key (subset_hash, parameter, attribute_name, attribute_value)
+        , primary key (model_id, subset_id, tie_breaker, evaluation_start_time, evaluation_end_time, parameter, attribute_name, attribute_value)
     );
 
 
