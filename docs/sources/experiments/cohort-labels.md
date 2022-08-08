@@ -172,10 +172,10 @@ group by entity_id
 
 If you want to test out a cohort query without running an entire experiment, there are a few ways, and the easiest way depends on how much of the rest of the experiment you have configured.
 
-Option 1: **You have not started writing an experiment config file yet**. If you just want to test your query with a hardcoded list of dates as Triage does it (including as-of-date interpolation), you can instantiate the `EntityDateTableGenerator` with the query and run it for those dates. This skips any temporal config, so you don't have to worry about temporal config:
+Option 1: **You have not started writing an experiment config file yet**. If you just want to test your query with a hardcoded list of dates as Triage does it (including as-of-date interpolation), you can instantiate the `CohortGenerator` with the query and run it for those dates. This skips any temporal config, so you don't have to worry about temporal config:
 
 ```python
-from triage.component.architect.entity_date_table_generators import EntityDateTableGenerator
+from triage.component.architect.cohort_generators import CohortGenerator
 from triage import create_engine
 from datetime import datetime
 
@@ -219,7 +219,7 @@ The labels table works similarly to the cohort table: you give it a filepath poi
 
 ### Missing Labels
 
-Since the cohort has its own definition query, separate from the label query, we have to consider the possibility that not every entity in the cohort is present in the label query, and how to deal with these missing labels.  The label value in the train matrix in these cases is controlled by a flag in the label config: `include_missing_labels_in_train_as`. 
+Since the cohort has its own definition query, separate from the label query, we have to consider the possibility that not every entity in the cohort is present in the label query, and how to deal with these missing labels.  The label value in the train matrix in these cases is controlled by a flag in the label config: `include_missing_labels_in_train_as`.
 
 - If you omit the flag, they show up as missing. This is common for inspections problems, wherein you really don't know a suitable label. The facility wasn't inspected, so you really don't know what the label is. This makes evaluation a bit more complicated, as some of the facilities with high risk scores may have no labels. But this is a common tradeoff in inspections problems.
 - If you set it to True, that means that all of the rows have positive label. What does this mean? It depends on what exactly your label query is, but a common use would be to model early warning problems of dropouts, in which the *absence* of an event (e.g. a school enrollment event) is the positive label.
@@ -240,7 +240,7 @@ entity_id | date | result
 25 | 2016-02-04  | fail
 
 
-The entity id is the same as the cohort above: it identifies the restaurant. The date is just the date that the inspection happened, and the result is a string 'pass'/'fail' stating whether or not the restaurant passed the inspection. 
+The entity id is the same as the cohort above: it identifies the restaurant. The date is just the date that the inspection happened, and the result is a string 'pass'/'fail' stating whether or not the restaurant passed the inspection.
 
 
 #### Inspections Label Config
@@ -406,7 +406,7 @@ entity_id | as_of_date
 
 ### Label
 entity_id | as_of_date | label
------------- | ------------- | ------------- 
+------------ | ------------- | -------------
 25 | 2016-01-01 | True
 25 | 2016-02-01 | False
 44 | 2016-02-01 | True
@@ -427,7 +427,7 @@ The final contents of the matrix, however, depend on the `include_missing_labels
 If `include_missing_labels_in_train_as` is not set, Triage treats it as a truly missing label. The final matrix will look like:
 
 entity_id | as_of_date | ...features... | label
------------- | ------------- | ------------- | ------------- 
+------------ | ------------- | ------------- | -------------
 25 | 2016-01-01 | ... | True
 44 | 2016-01-01 | ... | **null**
 25 | 2016-02-01 | ... | False
@@ -441,7 +441,7 @@ entity_id | as_of_date | ...features... | label
 If `include_missing_labels_in_train_as` is set to False, Triage treats the absence of a label row as a False label. The final matrix will look like:
 
 entity_id | as_of_date | ...features... | label
------------- | ------------- | ------------- | ------------- 
+------------ | ------------- | ------------- | -------------
 25 | 2016-01-01 | ... | True
 44 | 2016-01-01 | ... | **False**
 25 | 2016-02-01 | ... | False
@@ -455,7 +455,7 @@ entity_id | as_of_date | ...features... | label
 If `include_missing_labels_in_train_as` is set to True, Triage treats the absence of a label row as a True label. The final matrix will look like:
 
 entity_id | as_of_date | ...features... | label
------------- | ------------- | ------------- | ------------- 
+------------ | ------------- | ------------- | -------------
 25 | 2016-01-01 | ... | True
 44 | 2016-01-01 | ... | **True**
 25 | 2016-02-01 | ... | False

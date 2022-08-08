@@ -2,7 +2,7 @@ import copy
 import itertools
 
 from triage.component.catwalk.utils import filename_friendly_hash
-from . import utils, entity_date_table_generators
+from . import utils, cohort_generators
 
 import verboselogs
 logger = verboselogs.VerboseLogger(__name__)
@@ -96,7 +96,7 @@ class Planner:
                 "test_label_timespan",
                 matrix_definition.get("training_label_timespan", "0 days"),
             ),
-            "state": entity_date_table_generators.DEFAULT_ACTIVE_STATE,
+            "state": cohort_generators.DEFAULT_ACTIVE_STATE,
             "cohort_name": cohort_name,
             "matrix_id": matrix_id,
             "matrix_type": matrix_type,

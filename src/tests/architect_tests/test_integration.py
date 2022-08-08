@@ -16,7 +16,7 @@ from triage.component.architect.features import (
     FeatureGroupMixer,
 )
 from triage.component.architect.label_generators import LabelGenerator
-from triage.component.architect.entity_date_table_generators import EntityDateTableGenerator
+from triage.component.architect.cohort_generators import CohortGenerator
 from triage.component.architect.planner import Planner
 from triage.component.architect.builders import MatrixBuilder
 from triage.component.catwalk.storage import ProjectStorage
@@ -162,7 +162,7 @@ def basic_integration_test(
                 test_durations=["1months"],
             )
 
-            entity_date_table_generator = EntityDateTableGenerator(
+            entity_date_table_generator = CohortGenerator(
                 db_engine=db_engine,
                 entity_date_table_name="cohort_abcd",
                 query="select distinct(entity_id) from events"

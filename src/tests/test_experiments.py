@@ -364,7 +364,7 @@ class TestConfigVersion(TestCase):
 
 @parametrize_experiment_classes
 @mock.patch(
-    "triage.component.architect.entity_date_table_generators."
+    "triage.component.architect.cohort_generators."
     "EntityDateTableGenerator.clean_up",
     side_effect=lambda: time.sleep(1),
 )
@@ -408,7 +408,7 @@ def test_build_error(experiment_class):
 
 @parametrize_experiment_classes
 @mock.patch(
-    "triage.component.architect.entity_date_table_generators."
+    "triage.component.architect.cohort_generators."
     "EntityDateTableGenerator.clean_up",
     side_effect=lambda: time.sleep(1),
 )

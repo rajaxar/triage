@@ -2,8 +2,6 @@ import argparse
 import importlib.util
 import os
 import yaml
-import pathlib
-
 
 from datetime import datetime
 
@@ -12,8 +10,8 @@ from argcmdr import RootCommand, Command, main, cmdmethod, local
 from getpass import getpass
 from sqlalchemy.engine.url import URL
 from triage.component.architect.feature_generators import FeatureGenerator
-from triage.component.architect.entity_date_table_generators import (
-    EntityDateTableGenerator,
+from triage.component.architect.cohort_generators import (
+    CohortGenerator,
 )
 from triage.component.audition import AuditionRunner
 from triage.component.results_schema import (
@@ -31,7 +29,6 @@ from triage.experiments import (
     SingleThreadedExperiment,
 )
 from triage.predictlist import predict_forward_with_existed_model, Retrainer
-from triage.component.postmodeling.crosstabs import CrosstabsConfigLoader, run_crosstabs
 from triage.component.postmodeling.utils.add_predictions import add_predictions
 from triage.util.conf import load_query_if_needed
 from triage.util.db import create_engine
@@ -145,7 +142,7 @@ class FeatureTest(Command):
         feature_config = full_config["feature_aggregations"]
         cohort_config = load_query_if_needed(full_config.get("cohort_config", None))
         if cohort_config:
-            EntityDateTableGenerator(
+            CohortGenerator(
                 entity_date_table_name="features_test.test_cohort",
                 db_engine=db_engine,
                 query=cohort_config["query"],

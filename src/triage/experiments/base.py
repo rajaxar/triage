@@ -22,9 +22,9 @@ from triage.component.architect.features import (
 )
 from triage.component.architect.planner import Planner
 from triage.component.architect.builders import MatrixBuilder
-from triage.component.architect.entity_date_table_generators import (
-    EntityDateTableGenerator,
-    CohortTableGeneratorNoOp,
+from triage.component.architect.cohort_generators import (
+    CohortGenerator,
+    CohortGeneratorNoOp,
 )
 from triage.component.timechop import Timechop
 from triage.component import results_schema
@@ -335,13 +335,13 @@ class ExperimentBase(ABC):
             self.features_ignore_cohort = True
             self.cohort_hash = None
             self.cohort_table_name = "cohort_{}".format(self.experiment_hash)
-            self.cohort_table_generator = CohortTableGeneratorNoOp()
+            self.cohort_table_generator = CohortGeneratorNoOp()
 
         if not self.cohort_table_generator:
             self.cohort_table_name = "cohort_{}_{}".format(
                 cohort_config.get("name", "default"), self.cohort_hash
             )
-            self.cohort_table_generator = EntityDateTableGenerator(
+            self.cohort_table_generator = CohortGenerator(
                 entity_date_table_name=self.cohort_table_name,
                 db_engine=self.db_engine,
                 query=cohort_config.get("query", None),

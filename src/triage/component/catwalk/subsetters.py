@@ -3,7 +3,7 @@ logger = verboselogs.VerboseLogger(__name__)
 
 from sqlalchemy.orm import sessionmaker
 
-from triage.component.architect.entity_date_table_generators import EntityDateTableGenerator
+from triage.component.architect.cohort_generators import CohortGenerator
 from triage.component.catwalk.utils import (filename_friendly_hash, get_subset_table_name)
 from triage.component.results_schema import Subset
 
@@ -48,7 +48,7 @@ class Subsetter:
         for subset_config in subset_configs:
             if subset_config:
                 subset_hash = filename_friendly_hash(subset_config)
-                subset_table_generator = EntityDateTableGenerator(
+                subset_table_generator = CohortGenerator(
                     entity_date_table_name=get_subset_table_name(subset_config),
                     db_engine=self.db_engine,
                     query=subset_config["query"],

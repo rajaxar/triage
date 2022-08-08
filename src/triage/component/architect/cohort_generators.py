@@ -7,7 +7,7 @@ logger = verboselogs.VerboseLogger(__name__)
 DEFAULT_ACTIVE_STATE = "active"
 
 
-class EntityDateTableGenerator:
+class CohortGenerator:
     """Create a table containing state membership on different dates
 
     The structure of the output table is:
@@ -151,7 +151,7 @@ class EntityDateTableGenerator:
         self.db_engine.execute(f"drop table if exists {self.entity_date_table_name}")
 
 
-class CohortTableGeneratorNoOp(EntityDateTableGenerator):
+class CohortGeneratorNoOp(CohortGenerator):
     def __init__(self):
         pass
 

@@ -4,7 +4,7 @@ import pytest
 import testing.postgresql
 from sqlalchemy.engine import create_engine
 
-from triage.component.architect.entity_date_table_generators import EntityDateTableGenerator
+from triage.component.architect.cohort_generators import CohortGenerator
 
 from . import utils
 
@@ -18,7 +18,7 @@ def test_empty_output():
     with testing.postgresql.Postgresql() as postgresql:
         engine = create_engine(postgresql.url())
         utils.create_binary_outcome_events(engine, "events", [])
-        table_generator = EntityDateTableGenerator(
+        table_generator = CohortGenerator(
             query="select entity_id from events where outcome_date < '{as_of_date}'::date",
             db_engine=engine,
             entity_date_table_name="exp_hash_cohort",
@@ -53,7 +53,7 @@ def test_entity_date_table_generator_replace():
     with testing.postgresql.Postgresql() as postgresql:
         engine = create_engine(postgresql.url())
         utils.create_binary_outcome_events(engine, "events", input_data)
-        table_generator = EntityDateTableGenerator(
+        table_generator = CohortGenerator(
             query="select entity_id from events where outcome_date < '{as_of_date}'::date",
             db_engine=engine,
             entity_date_table_name="exp_hash_entity_date",
@@ -118,7 +118,7 @@ def test_entity_date_table_generator_noreplace():
     with testing.postgresql.Postgresql() as postgresql:
         engine = create_engine(postgresql.url())
         utils.create_binary_outcome_events(engine, "events", input_data)
-        table_generator = EntityDateTableGenerator(
+        table_generator = CohortGenerator(
             query="select entity_id from events where outcome_date < '{as_of_date}'::date",
             db_engine=engine,
             entity_date_table_name="exp_hash_entity_date",
@@ -217,7 +217,7 @@ def test_entity_date_table_generator_from_labels():
     with testing.postgresql.Postgresql() as postgresql:
         engine = create_engine(postgresql.url())
         labels_table_name = utils.create_labels(engine, labels_data)
-        table_generator = EntityDateTableGenerator(
+        table_generator = CohortGenerator(
             query=None,
             labels_table_name=labels_table_name,
             db_engine=engine,
