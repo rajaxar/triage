@@ -52,7 +52,7 @@ do $triage_metadata$ begin
 
     drop table if exists experiments;
     create table if not exists experiments (
-               experiment_id                integer generated always as identity primary key
+               experiment_id                bigint generated always as identity primary key
                , experiment_hash            text unique
                , config                     jsonb
                , time_splits                smallint
@@ -66,7 +66,7 @@ do $triage_metadata$ begin
 
     drop table if exists retrains;
     create table if not exists retrains (
-        retrain_id        integer generated always as identity primary key
+        retrain_id        bigint generated always as identity primary key
         , retrain_hash      text unique
         , config          jsonb
         , prediction_date timestamp with time zone
@@ -75,13 +75,13 @@ do $triage_metadata$ begin
 
     drop table if exists triage_runs;
     create table if not exists triage_runs (
-             triage_run_id         integer generated always as identity primary key
-                , start_time       timestamp with time zone
+             triage_run_id         bigint generated always as identity primary key
+                , experiment_id    bigint references experiments (experiment_id)
+                , start_time       timestamp with time zone not null default now()
                 , start_method     text
                 , git_hash         text
                 , python_version   text
                 , run_type         text
-                , run_hash         text
                 , platform         text
                 , os_user          text
                 , working_directory text
@@ -109,7 +109,7 @@ do $triage_metadata$ begin
 
     drop table if exists subsets;
     create table if not exists subsets (
-        subset_id        integer generated always as identity primary key
+        subset_id        bigint generated always as identity primary key
         , subset_hash    text unique
         , config         jsonb
         , created_at     timestamp with time zone not null default now()
@@ -118,7 +118,7 @@ do $triage_metadata$ begin
 
     drop table if exists model_groups;
     create table if not exists model_groups (
-               model_group_id     integer generated always as identity primary key
+               model_group_id     bigint generated always as identity primary key
                , model_type       text
                , hyperparameters  jsonb
                , feature_list     text[]
@@ -128,8 +128,8 @@ do $triage_metadata$ begin
 
     drop table if exists matrices;
     create table if not exists matrices (
-                matrix_id            integer generated always as identity primary key
-                , experiment_id      integer references experiments (experiment_id)  -- was built_by_experiment
+                matrix_id            bigint generated always as identity primary key
+                , experiment_id      bigint references experiments (experiment_id)  -- was built_by_experiment
                 , matrix_hash        text unique                                     -- was matrix_uuid
                 , matrix_type        matrix_type
                 , labeling_window    tstzrange
@@ -156,7 +156,7 @@ do $triage_metadata$ begin
 
     drop table if exists models;
     create table if not exists models (
-               model_id           integer generated always as identity primary key
+               model_id           bigint generated always as identity primary key
                , model_group_id   integer references model_groups(model_group_id)
                , model_hash       text unique
                , run_time         timestamp with time zone
@@ -208,7 +208,7 @@ do $train_results$ begin
 
     drop table if exists feature_importances;
     create table if not exists feature_importances (
-        feature_importance_id integer generated always as identity
+        feature_importance_id bigint generated always as identity
         , model_id            integer references triage_metadata.models (model_id)
         , feature             text
         , feature_importance  real
