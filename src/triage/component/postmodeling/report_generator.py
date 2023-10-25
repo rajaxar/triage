@@ -5,13 +5,13 @@ import seaborn as sns
 import numpy as np
 import itertools
 
-
 from descriptors import cachedproperty
 from scipy.stats import spearmanr
 
 from triage.component.postmodeling.model_analyzer import ModelAnalyzer
 from triage.component.postmodeling.error_analysis import generate_error_analysis, output_all_analysis
-
+from triage.component.timechop.plotting import visualize_chops
+from triage.component.timechop import Timechop
 
 class PostmodelingReport: 
 
@@ -20,12 +20,11 @@ class PostmodelingReport:
         self.experiment_hashes = experiment_hashes # TODO made experiment hashes into a list to plot models from different experiments for MVESC, there's probably a better way to generalize this
         self.engine = engine
         self.project_path = project_path
-        if use_all_model_groups: # shortcut to listing out all model groups for an experiment
-            self.use_all_model_groups()
         self.models = self.get_model_ids()
 
         #TODO: Would be good to let the user restrict the train_end_times included in the report
-
+        #TODO: self.use_all_model_groups should be a method that returns all model groups for an experiment, 
+        # can be used in the constructor.
         
     @property
     def model_ids(self):
@@ -45,12 +44,8 @@ class PostmodelingReport:
         all_models = pd.DataFrame(data_dict, columns=['model_group_id', 'train_end_time', 'model_id', 'model_type', 'hyperparameters'])
 
         # displaying the model_group_ids, model_type, and the hyperparameters
-        to_print = all_models.groupby('model_group_id').nth(1)[['model_type', 'hyperparameters']].reset_index().to_dict(orient='records')
-
-        for m in to_print:
-            print(m)
-
-        return all_models
+        grouped_models = all_models.groupby('model_group_id').nth(1)[['model_type', 'hyperparameters']].reset_index().to_dict(orient='records')
+        return grouped_models
 
     def cohort_summary(self):
         q = f"""
@@ -65,10 +60,9 @@ class PostmodelingReport:
             order by 1
         """
 
-        matrices = pd.read_sql(q, self.engine)
-
-        print(matrices)
-
+        matrices = pd.read_sql(q, self.engine).to_dict(orient='records')
+        return (matrices)
+    
     def plot_model_group_performance(self, metric, parameter):
         pass
 
@@ -121,6 +115,47 @@ class PostmodelingReport:
 
         return d 
     
+    def all_issues(self):
+        q = f"""
+            select distinct on(run_hash)
+                run_hash as experiment_id,
+                replace(current_status::text, 'started', 'not finished') as status,
+                models_made,
+                models_skipped,
+                models_errored,
+                stacktrace::text as error_message
+            from triage_metadata.triage_runs
+            where current_status != 'completed'
+        """
+        return pd.read_sql(q, self.engine).to_dict(orient='records')
+
+    def get_issues(self):
+        experiment_hashes = "', '".join(self.experiment_hashes)
+        q = f"""
+            select
+                replace(current_status::text, 'started', 'not finished') as status,
+                models_made,
+                models_skipped,
+                models_errored,
+                stacktrace::text as error_message
+            from triage_metadata.triage_runs
+            where current_status != 'completed'
+            and run_hash in ('{experiment_hashes}')
+        """
+        return pd.read_sql(q, self.engine).to_dict(orient='records')
+
+    def plot_timechops(self):
+        experiment_hashes = "', '".join(self.experiment_hashes)
+        q = f"""
+            select config
+            from triage_metadata.experiments
+            where experiment_hash in ('{experiment_hashes}')
+        """
+        ## TODO: currently only looks at first experiment hash
+        config = pd.read_sql(q, self.engine).to_dict(orient='records')[0]['config']['temporal_config']
+        chopper = Timechop(**config)
+        visualize_chops(chopper)
+            
     def _get_subplots(self, subplot_width=3, subplot_len=None, n_rows=None, n_cols=None, sharey=False, sharex=False):
         """"""
 
