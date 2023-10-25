@@ -14,6 +14,7 @@ docs/site/
 .DS_Store
 
 .ipynb_checkpoints/
+.virtual_documents/
 venv/
 my_db_config.yaml
 database.yaml
